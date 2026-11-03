@@ -2,6 +2,31 @@
 
 All notable changes. Format: Keep-a-Changelog-ish; dates UTC.
 
+## [0.1.0-dev] — 2026-11-04 (M4)
+
+### Added
+- **Native Qt6 Widgets UI** (user requirement: native, no web/GL): single
+  dark window (Fusion palette), transport bar (play/stop/record, BPM,
+  loop bars, click level, position readout bar.beat.tick, xrun + callback
+  µs live readout, device LED), 5 views (Arrangement timeline skeleton,
+  Pattern placeholder, Mixer, Device with manifest readout, Health with
+  in-GUI bench), persistent controller mirror (custom-painted 8 knob arcs
+  + 16-pad grid with hit glow, mode/bank/octave/track strip), 30 Hz
+  polling of engine state via lock-free paths only. Offscreen-runnable
+  (`QT_QPA_PLATFORM=offscreen`) — GUI constructs headless for CI.
+- **Threading hardening**: MIDI input thread no longer touches the synth —
+  two SPSC queues (MIDI→audio VoiceCmd, MIDI→app events); pedal is an
+  explicit typed command; app/Qt thread drains mapping/recorder.
+- Arpeggiator wired end-to-end (held keys → arp pool → grid strikes via
+  RT queue); scale-lock toggle (snaps keys to scale, chromatic default).
+- **Control coverage audit** (spec §5 gate): every manifest control bound
+  in ≥1 mode — CI test, currently zero dead controls across the 55-control
+  inventory.
+
+### Fixed
+- Dropped -Wnull-dereference (false positives inside libstdc++ headers
+  under GCC 16 -O2/C++26).
+
 ## [0.1.0-dev] — 2026-11-03 (M2 + M3)
 
 ### Added

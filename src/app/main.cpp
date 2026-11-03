@@ -8,6 +8,10 @@
 #include "log/logger.hpp"
 #include "ops/bench.hpp"
 
+#if defined(ADDU94_UI_ENABLED)
+#include "ui/app_gui.hpp"
+#endif
+
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -30,7 +34,8 @@ void print_usage() {
         "  repair        Verify/rebuild config, journal, samples, manifest\n"
         "  bench         Run benchmark suite, write bench-report.json\n"
         "  probe         Probe connected MIDI devices, write device manifest\n"
-        "  play          Launch the app (GUI when a display is present)\n"
+        "  play          Launch the app (native GUI; --headless keeps the\n"
+        "                console loop, --seconds N auto-stops after N s)\n"
         "  version       Print version\n"
         "\n"
         "See docs/ for the full manual. https://addu94.local (offline-first)\n",
@@ -42,7 +47,7 @@ int cmd_version() {
     return 0;
 }
 
-int cmd_play(int auto_stop_seconds) {
+int cmd_play(int auto_stop_seconds, bool headless) {
     addu94::log::Logger::init("", addu94::log::Level::Info);
     addu94::app::PlayEngine engine;
     std::string error;
@@ -54,18 +59,32 @@ int cmd_play(int auto_stop_seconds) {
     std::printf(
         "addu94 is live. Play your MPK Mini — keys make sound, pads fire "
         "chord slots, knobs mix.\n");
-    if (auto_stop_seconds > 0) {
-        std::printf("(auto-stop after %d s)\n", auto_stop_seconds);
-        std::this_thread::sleep_for(std::chrono::seconds(auto_stop_seconds));
-    } else {
-        std::printf("(Ctrl-C to quit)\n");
-        for (;;) std::this_thread::sleep_for(std::chrono::hours(1));
+    int rc = 0;
+#if defined(ADDU94_UI_ENABLED)
+    if (!headless) {
+        // Native GUI (spec §9): owns the app-event drain (30 Hz timer) and
+        // the transport/mapping control plane. auto_stop_seconds > 0 quits
+        // the event loop after that time (CI smoke runs).
+        if (auto_stop_seconds > 0) {
+            std::printf("(auto-stop after %d s)\n", auto_stop_seconds);
+        }
+        rc = addu94::ui::run_gui(engine, auto_stop_seconds);
+    } else
+#endif
+    {
+        // Headless path (unchanged): sleep loop, no display, no Qt.
+        if (auto_stop_seconds > 0) {
+            std::printf("(auto-stop after %d s)\n", auto_stop_seconds);
+            std::this_thread::sleep_for(std::chrono::seconds(auto_stop_seconds));
+        } else {
+            std::printf("(Ctrl-C to quit)\n");
+            for (;;) std::this_thread::sleep_for(std::chrono::hours(1));
+        }
     }
-    std::printf("voices active: %d, audio running: %d\n", engine.active_voices(),
-                engine.audio_running() ? 1 : 0);
+    std::printf("audio running: %d\n", engine.audio_running() ? 1 : 0);
     engine.stop();
     addu94::log::Logger::shutdown();
-    return 0;
+    return rc;
 }
 
 int cmd_doctor() {
@@ -163,12 +182,15 @@ int main(int argc, char const** argv) {
     // milestone lands.
     if (cmd == "play") {
         int seconds = 0;
-        for (int i = 2; i + 1 < argc; ++i) {
-            if (std::string_view{argv[i]} == "--seconds") {
+        bool headless = false;
+        for (int i = 2; i < argc; ++i) {
+            if (std::string_view{argv[i]} == "--seconds" && i + 1 < argc) {
                 seconds = std::atoi(argv[i + 1]);
+            } else if (std::string_view{argv[i]} == "--headless") {
+                headless = true;
             }
         }
-        return cmd_play(seconds);
+        return cmd_play(seconds, headless);
     }
     if (cmd == "repair") {
         std::fprintf(stderr,

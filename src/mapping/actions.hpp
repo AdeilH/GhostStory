@@ -49,6 +49,7 @@ enum class Action : std::uint16_t {
 
     // --- misc ---
     ArpToggle,
+    ScaleLockToggle,
     OctaveUp,
     OctaveDown,
     TempoNudge,    // knob: param = delta
@@ -89,6 +90,7 @@ enum class Action : std::uint16_t {
     case Action::ClipStop: return "clips.stop";
     case Action::ChordSlot: return "chords.slot";
     case Action::ArpToggle: return "arp.toggle";
+    case Action::ScaleLockToggle: return "keys.scale_lock";
     case Action::OctaveUp: return "keys.octave_up";
     case Action::OctaveDown: return "keys.octave_down";
     case Action::TempoNudge: return "transport.tempo";

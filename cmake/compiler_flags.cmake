@@ -14,7 +14,8 @@ function(addu94_apply_warnings target)
             -Wcast-align
             -Wunused
             -Woverloaded-virtual
-            -Wnull-dereference
+            # -Wnull-dereference dropped: false positives inside libstdc++
+            # headers (basic_string) under GCC 16 -O2 with C++26.
             -Wdouble-promotion
             -Wformat=2
         )

@@ -40,7 +40,7 @@ inline constexpr std::array<Scale, 8> kScales{{
 [[nodiscard]] constexpr bool in_scale(Scale const& s, int root, int note) noexcept {
     int const pc = ((note - root) % 12 + 12) % 12;
     for (int i = 0; i < s.count; ++i) {
-        if (s.semitones[i] == pc) return true;
+        if (s.semitones[static_cast<std::size_t>(i)] == pc) return true;
     }
     return false;
 }

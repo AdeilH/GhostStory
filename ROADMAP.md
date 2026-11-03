@@ -10,12 +10,17 @@ Status: ☐ todo · ◐ in progress · ☑ done
   *Gate: unit + virtual-port tests; probe writes valid manifest.* **DONE
   2026-11-03** (first live detection: MPK Mini MK3, client 20; identity
   request answered=no — verify on-device during M4 work).
-- ☐ **M2 — Audio engine** — PipeWire out (JACK/ALSA fallback), metronome,
-  sample-accurate transport. *Gate: p99 callback < 30% buffer, 0 xruns/5 min.*
-- ☐ **M3 — First playable** — keys→synth, sustain, octave, velocity curves,
-  mixer, transport, loop record. *Gate: record/overdub/undo round-trip test.*
-- ☐ **M4 — Full control system** — modes, knobs, pads, joystick, ARP (hw+sw),
-  note repeat, controller mirror UI. *Gate: control-coverage audit, 0 dead controls.*
+- ☑ **M2 — Audio engine** — PipeWire out (JACK/ALSA fallback), metronome,
+  sample-accurate transport. *Gate: p99 callback < 30% buffer, 0 xruns/5
+  min.* **DONE 2026-11-03** (measured: p99=6 µs = 0.1% of budget, 0 xruns;
+  JACK/ALSA backends deferred as drop-in interface impls).
+- ☑ **M3 — First playable** — keys→synth, sustain, octave, velocity curves,
+  mixer, transport, loop record. *Gate: record/overdub/undo round-trip
+  test.* **DONE 2026-11-03** (live-verified on MPK mini 3).
+- ☑ **M4 — Full control system** — modes, knobs, pads, joystick, ARP
+  (sw; hw-arp reachable via SysEx presets in M6+), note repeat (sw),
+  controller mirror UI (native Qt6), coverage audit. *Gate: audit passes —
+  zero dead controls.* **DONE 2026-11-04.**
 - ☐ **M5 — Song builder core** — tracks, patterns, arrangement, quantize,
   scale-lock, WAL + crash recovery. *Gate: kill -9 recovery; SMF export valid.*
 - ☐ **M6 — Sound completeness** — sampler (SFZ/WAV), drum kit, FX, WAV/FLAC

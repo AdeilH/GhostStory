@@ -21,6 +21,7 @@ include(sanitizers)
 option(ADDU94_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 option(ADDU94_BUILD_TESTS "Build test executables" ON)
 option(ADDU94_SANITIZE "Sanitizers for test targets: off|asan|tsan" "off")
+option(ADDU94_UI "Build native Qt6 GUI" ON)
 
 find_package(Threads REQUIRED)
 find_package(ALSA REQUIRED)
@@ -39,6 +40,7 @@ add_library(addu94_core STATIC
     src/app/play_engine.cpp
     src/music/transport.cpp
     src/mapping/mapping.cpp
+    src/mapping/audit.cpp
     src/project/smf.cpp
     src/project/document.cpp
     src/project/journal.cpp
@@ -60,6 +62,30 @@ add_executable(addu94 src/app/main.cpp)
 target_link_libraries(addu94 PRIVATE addu94_core)
 addu94_apply_warnings(addu94)
 addu94_apply_sanitizers(addu94)  # at least link the runtime (core lib is instrumented)
+
+# Native Qt6 Widgets GUI (spec §9): dark, dense, hardware-first. Moc is not
+# needed (plain widgets + lambdas, no Q_OBJECT), but AUTOMOC stays on so
+# future signal-based widgets drop in without CMake churn.
+if(ADDU94_UI)
+    find_package(Qt6 COMPONENTS Widgets REQUIRED)
+    set(CMAKE_AUTOMOC ON)
+    add_library(addu94_ui STATIC
+        src/ui/main_window.cpp
+        src/ui/controller_mirror.cpp
+        src/ui/arrangement_view.cpp
+        src/ui/mixer_view.cpp
+        src/ui/device_view.cpp
+        src/ui/health_view.cpp
+        src/ui/app_gui.cpp
+    )
+    target_include_directories(addu94_ui PUBLIC src)
+    target_link_libraries(addu94_ui PUBLIC Qt6::Widgets addu94_core)
+    target_compile_features(addu94_ui PUBLIC cxx_std_26)
+    addu94_apply_warnings(addu94_ui)
+    target_compile_definitions(addu94_ui PRIVATE ADDU94_UI_ENABLED)
+    target_link_libraries(addu94 PRIVATE addu94_ui)
+    target_compile_definitions(addu94 PRIVATE ADDU94_UI_ENABLED)
+endif()
 
 if(ADDU94_BUILD_TESTS)
     enable_testing()
