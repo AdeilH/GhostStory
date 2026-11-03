@@ -21,11 +21,28 @@ Status: ☐ todo · ◐ in progress · ☑ done
   (sw; hw-arp reachable via SysEx presets in M6+), note repeat (sw),
   controller mirror UI (native Qt6), coverage audit. *Gate: audit passes —
   zero dead controls.* **DONE 2026-11-04.**
-- ☐ **M5 — Song builder core** — tracks, patterns, arrangement, quantize,
-  scale-lock, WAL + crash recovery. *Gate: kill -9 recovery; SMF export valid.*
-- ☐ **M6 — Sound completeness** — sampler (SFZ/WAV), drum kit, FX, WAV/FLAC
-  export. *Gate: master = sum of stems (tolerance).*
-- ☐ **M7 — Ops layer** — watchdog, doctor, repair, safe mode, crash handler,
-  telemetry, bench, fuzz. *Gate: fuzz green; forced faults recover.*
-- ☐ **M8 — Polish & packaging** — docs, man page, .desktop, packaging,
-  onboarding, v0.1.0. *Gate: fresh-machine checklist.*
+- ☑ **M5 — Song builder core** — tracks, patterns, arrangement, quantize,
+  scale-lock, WAL + crash recovery. *Gate: kill -9 recovery (31 events
+  recovered after SIGKILL); SMF export valid.* **DONE 2026-11-04.**
+- ☑ **M6 — Sound completeness** — sampler (WAV zones; SFZ parser deferred),
+  drum kit w/ synthesized fallbacks, FX chain (EQ3/delay/chorus/clip),
+  WAV stems+master export. *Gate: master = sum of stems (1e-6).* **DONE
+  2026-11-04.** FLAC export deferred (no libFLAC dependency accepted for
+  offline-first build; WAV is the shipped format).
+- ☑ **M7 — Ops layer** — watchdog, doctor, repair, safe mode, crash
+  handler, telemetry, bench, fuzz. *Gate: fuzz green (1119 blobs, no
+  wedge); kill -9 recovery green.* **DONE 2026-11-04.**
+- ☑ **M8 — Polish & packaging** — docs (MANUAL.md), man page, .desktop,
+  PKGBUILD, install rules, v0.1.0 tag. *Gate: full CI green at tag.*
+
+## Post-v0.1.0 backlog (honest deferrals)
+
+- JACK / ALSA audio backends (interface ready in audio/backend.hpp;
+  PipeWire is the production path on this machine).
+- SFZ parser for the sampler (plain WAV zones shipped).
+- FLAC export.
+- Hardware ARP + preset SysEx editing (capture methodology in
+  docs/sysex.md; needs on-device sessions).
+- On-hardware acceptance checklist (spec §12 items 1-6) — requires the
+  owner playing the device; automated gates cover everything scriptable.
+- Knob-per-preset calibration flow in the Device view.

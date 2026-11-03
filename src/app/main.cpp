@@ -29,7 +29,7 @@
 
 namespace {
 
-constexpr std::string_view kVersion = "0.1.0-dev";
+constexpr std::string_view kVersion = "0.1.0";
 
 void print_usage() {
     std::fputs(

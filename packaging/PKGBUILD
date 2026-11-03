@@ -1,0 +1,31 @@
+# Maintainer: addu94 developers <dev@addu94.local>
+pkgname=addu94
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Self-healing song builder for the Akai MPK Mini on Linux"
+arch=('x86_64')
+url="https://example.invalid/addu94"  # set on release
+license=('GPL3')
+depends=('alsa-lib' 'pipewire' 'qt6-base' 'gcc-libs')
+makedepends=('cmake' 'ninja' 'pkgconf')
+source=("$pkgname-$pkgver.tar.gz")  # git archive output; fill on release
+sha256sums=('SKIP')
+
+build() {
+    cmake -S "$srcdir/$pkgname-$pkgver" -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build build -j"$(nproc)"
+}
+
+check() {
+    ctest --test-dir build --output-on-failure
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+    install -Dm644 "$srcdir/$pkgname-$pkgver/docs/addu94.1" \
+        "$pkgdir/usr/share/man/man1/addu94.1"
+    install -Dm644 "$srcdir/$pkgname-$pkgver/packaging/addu94.desktop" \
+        "$pkgdir/usr/share/applications/addu94.desktop"
+}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=addu94
+GenericName=Song Builder
+Comment=Self-healing song builder for the Akai MPK Mini on Linux
+Exec=addu94 play
+Icon=addu94
+Terminal=false
+Categories=AudioVideo;Audio;Midi;
+Keywords=midi;mpk;akai;synth;sequencer;music;
+StartupNotify=false

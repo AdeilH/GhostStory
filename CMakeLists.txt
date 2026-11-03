@@ -103,6 +103,8 @@ if(ADDU94_BUILD_TESTS)
 endif()
 
 install(TARGETS addu94 RUNTIME DESTINATION bin)
+install(FILES docs/addu94.1 DESTINATION share/man/man1)
+install(FILES packaging/addu94.desktop DESTINATION share/applications)
 
 # MIDI fuzz harness (spec §7.5) — dev/CI tool.
 add_executable(fuzz_midi tools/fuzz_midi/fuzz_midi.cpp)
