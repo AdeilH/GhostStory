@@ -1,0 +1,25 @@
+# addu94 — cmake/sanitizers.cmake
+# ADDU94_SANITIZE: off | asan (ASan+UBSan, test targets) | tsan (queue/transport)
+# Never applied to release builds of the shipped binary.
+
+if(ADDU94_SANITIZE STREQUAL "asan")
+    message(STATUS "addu94: ASan+UBSan enabled for test targets")
+    set(ADDU94_SAN_FLAGS "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all")
+    set(ADDU94_SAN_LINK "-fsanitize=address,undefined")
+elseif(ADDU94_SANITIZE STREQUAL "tsan")
+    message(STATUS "addu94: TSan enabled for test targets")
+    set(ADDU94_SAN_FLAGS "-fsanitize=thread -fno-omit-frame-pointer")
+    set(ADDU94_SAN_LINK "-fsanitize=thread")
+else()
+    set(ADDU94_SAN_FLAGS "")
+    set(ADDU94_SAN_LINK "")
+endif()
+
+function(addu94_apply_sanitizers target)
+    if(NOT ADDU94_SANITIZE STREQUAL "off")
+        separate_arguments(ADDU94_SAN_FLAGS)
+        target_compile_options(${target} PRIVATE ${ADDU94_SAN_FLAGS})
+        separate_arguments(ADDU94_SAN_LINK)
+        target_link_options(${target} PRIVATE ${ADDU94_SAN_LINK})
+    endif()
+endfunction()
