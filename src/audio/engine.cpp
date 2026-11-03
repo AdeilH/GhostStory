@@ -136,9 +136,12 @@ void AudioEngine::render(Sample* left, Sample* right,
         std::uint64_t const ns = static_cast<std::uint64_t>(
             (ts1.tv_sec - ts0.tv_sec) * 1000000000LL +
             (ts1.tv_nsec - ts0.tv_nsec));
-        auto const us = static_cast<std::uint32_t>(ns / 1000);
-        if (!timing_q_.push(us)) {
-            // Ring full: drop oldest-ish (skip) — bench reads fast enough.
+        TimingSample s;
+        s.start_us = static_cast<std::uint64_t>(ts0.tv_sec) * 1000000ULL +
+                     static_cast<std::uint64_t>(ts0.tv_nsec) / 1000ULL;
+        s.dur_us = static_cast<std::uint32_t>(ns / 1000);
+        if (!timing_q_.push(s)) {
+            // Ring full: drop (bench reads fast enough).
         }
     }
 }
@@ -154,7 +157,7 @@ bool AudioEngine::bench_stop_record() noexcept {
     return bench_recording_.exchange(false, std::memory_order_acq_rel);
 }
 
-std::size_t AudioEngine::bench_drain(std::uint32_t* out,
+std::size_t AudioEngine::bench_drain(TimingSample* out,
                                      std::size_t max) noexcept {
     std::size_t n = 0;
     while (n < max && timing_q_.pop(out[n])) ++n;

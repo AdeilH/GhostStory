@@ -29,7 +29,8 @@ long current_rss_kb() {
 
 }  // namespace
 
-BenchReport run_bench(int seconds, std::string const& report_path) {
+BenchReport run_bench(int seconds, std::string const& report_path,
+                      std::string const& trace_path) {
     BenchReport rep;
     audio::AudioEngine engine;
     audio::BackendConfig cfg;
@@ -47,14 +48,18 @@ BenchReport run_bench(int seconds, std::string const& report_path) {
     engine.bench_start_record();
     auto const t0 = std::chrono::steady_clock::now();
     std::vector<std::uint32_t> durations;
+    std::vector<audio::AudioEngine::TimingSample> samples;
     durations.reserve(static_cast<std::size_t>(seconds) *
                       st.sample_rate / st.buffer_size + 16);
-    std::uint32_t scratch[512];
+    audio::AudioEngine::TimingSample scratch[512];
     while (std::chrono::duration<double>(
                std::chrono::steady_clock::now() - t0)
                .count() < static_cast<double>(seconds)) {
         std::size_t const n = engine.bench_drain(scratch, 512);
-        for (std::size_t i = 0; i < n; ++i) durations.push_back(scratch[i]);
+        for (std::size_t i = 0; i < n; ++i) {
+            durations.push_back(scratch[i].dur_us);
+            samples.push_back(scratch[i]);
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
     engine.bench_stop_record();
@@ -88,6 +93,24 @@ BenchReport run_bench(int seconds, std::string const& report_path) {
                                              buffer_us * 100.0
                                        : 0.0;
     rep.gate_pass = rep.p99_budget_pct < 30.0 && rep.xruns == 0;
+
+    // Chrome-trace output (spec §7.6) when requested: one X event per
+    // callback so the JSON loads directly into chrome://tracing / Perfetto.
+    if (!trace_path.empty()) {
+        nlohmann::json ev = nlohmann::json::array();
+        for (auto const& s : samples) {
+            ev.push_back({{"ph", "X"},
+                          {"name", "audio-callback"},
+                          {"tid", 0},
+                          {"pid", 1},
+                          {"ts", s.start_us},
+                          {"dur", s.dur_us}});
+        }
+        std::ofstream tf(trace_path, std::ios::trunc);
+        tf << nlohmann::json{{"traceEvents", ev},
+                             {"displayTimeUnit", "ms"}}
+                  .dump();
+    }
 
     nlohmann::json j = {
         {"schema", 1},

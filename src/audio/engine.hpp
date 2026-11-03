@@ -56,9 +56,13 @@ public:
 
     /// Bench access: drain RT-pushed callback durations (microseconds).
     /// Only populated when bench_recording_ is on (bench command owns it).
+    struct TimingSample {
+        std::uint64_t start_us;   // CLOCK_MONOTONIC µs at callback start
+        std::uint32_t dur_us;     // callback duration
+    };
     bool bench_start_record() noexcept;   // returns true if newly on
     bool bench_stop_record() noexcept;
-    std::size_t bench_drain(std::uint32_t* out, std::size_t max) noexcept;
+    std::size_t bench_drain(TimingSample* out, std::size_t max) noexcept;
 private:
     static void render_trampoline(Sample* l, Sample* r, std::uint32_t f,
                                   void* user) noexcept;
@@ -77,10 +81,10 @@ private:
     void (*master_fn_)(Sample*, Sample*, std::uint32_t, void*){nullptr};
     void* master_user_{nullptr};
 
-    // Callback timing → bench (SPSC, RT producer, bench consumer).
+    // Callback timing → bench/trace (SPSC, RT producer, consumer).
     static constexpr std::size_t kTimingCap = 8192;
-    core::SpscQueue<std::uint32_t, kTimingCap> timing_q_;
-    std::uint32_t timing_scratch_{0};
+    core::SpscQueue<TimingSample, kTimingCap> timing_q_;
+    TimingSample timing_scratch_{};
     std::atomic<bool> bench_recording_{false};
 };
 

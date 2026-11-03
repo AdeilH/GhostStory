@@ -37,12 +37,20 @@ Status: ☐ todo · ◐ in progress · ☑ done
 
 ## Post-v0.1.0 backlog (honest deferrals)
 
-- JACK / ALSA audio backends (interface ready in audio/backend.hpp;
-  PipeWire is the production path on this machine).
-- SFZ parser for the sampler (plain WAV zones shipped).
-- FLAC export.
-- Hardware ARP + preset SysEx editing (capture methodology in
+- ☑ SFZ parser (practical v1 opcode subset) — DONE post-tag: sfz.hpp/.cpp,
+  13 tests, feeds Sampler directly.
+- ☑ Knob calibration `addu94 calibrate` — DONE post-tag: interactive
+  CC mapping -> profile.toml (makes all 8 knobs work on stock presets).
+- ☑ Trace mode `addu94 bench --trace` — DONE post-tag: Chrome-trace JSON
+  of callback timings (Perfetto/chrome://tracing loadable).
+- ☑ Soak gate scripts/test_soak.sh — DONE post-tag: concurrent record +
+  fuzz + bench; 2-min validation PASS (0 xruns, 2357 events recovered);
+  `test_soak.sh 30` runs the full spec §11 duration.
+- ☐ JACK / ALSA audio backends — IN PROGRESS (live-tested against
+  PipeWire's JACK emulation on this machine).
+- ☐ FLAC export — BLOCKED (no sudo on dev machine to install libflac-dev;
+  WAV is the shipped format).
+- ☐ Hardware ARP + preset SysEx editing (capture methodology in
   docs/sysex.md; needs on-device sessions).
-- On-hardware acceptance checklist (spec §12 items 1-6) — requires the
+- ☐ On-hardware acceptance checklist (spec §12 items 1-6) — requires the
   owner playing the device; automated gates cover everything scriptable.
-- Knob-per-preset calibration flow in the Device view.

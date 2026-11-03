@@ -29,7 +29,10 @@ struct BenchReport {
 };
 
 /// Run the bench for `seconds` (60 default; the M2 gate runs 300).
-/// Writes bench-report.json to `report_path`. Returns the report.
-BenchReport run_bench(int seconds, std::string const& report_path);
+/// Writes bench-report.json to `report_path`; when `trace_path` is
+/// non-empty, also writes a Chrome-trace-format JSON of callback timings
+/// (spec §7.6, `--trace`). Returns the report.
+BenchReport run_bench(int seconds, std::string const& report_path,
+                      std::string const& trace_path = {});
 
 }  // namespace addu94::ops

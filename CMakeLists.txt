@@ -27,6 +27,16 @@ find_package(Threads REQUIRED)
 find_package(ALSA REQUIRED)
 include(FindPkgConfig)
 pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
+# JACK fallback backend (spec §3): optional on purpose — a machine without
+# the jack dev package still builds; the engine then falls through to ALSA.
+# NOT REQUIRED: guard every JACK artifact on JACK_FOUND.
+pkg_check_modules(JACK IMPORTED_TARGET jack)
+
+# JACK backend source is only compiled when the jack headers exist.
+set(ADDU94_JACK_SOURCES "")
+if(JACK_FOUND)
+    list(APPEND ADDU94_JACK_SOURCES src/audio/jack_backend.cpp)
+endif()
 
 # First-party core (grows per milestone).
 add_library(addu94_core STATIC
@@ -34,16 +44,20 @@ add_library(addu94_core STATIC
     src/core/toml_min.cpp
     src/midi/alsa_client.cpp
     src/audio/pipewire_backend.cpp
+    ${ADDU94_JACK_SOURCES}
+    src/audio/alsa_backend.cpp
     src/audio/backends.cpp
     src/audio/engine.cpp
     src/audio/synth.cpp
     src/audio/wav_file.cpp
+    src/audio/sfz.cpp
     src/audio/sampler.cpp
     src/audio/drum_kit.cpp
     src/audio/fx.cpp
     src/audio/render_engine.cpp
     src/project/export_wav.cpp
     src/app/play_engine.cpp
+    src/app/calibrate.cpp
     src/music/transport.cpp
     src/mapping/mapping.cpp
     src/mapping/audit.cpp
@@ -61,6 +75,12 @@ add_library(addu94_core STATIC
 target_include_directories(addu94_core PUBLIC src)
 target_include_directories(addu94_core SYSTEM PUBLIC ${CMAKE_SOURCE_DIR}/third_party)
 target_link_libraries(addu94_core PUBLIC Threads::Threads ALSA::ALSA PkgConfig::PIPEWIRE)
+if(JACK_FOUND)
+    # Link libjack and tell backends.cpp to include JackBackend in the
+    # factory (PRIVATE: only core sources reference it).
+    target_link_libraries(addu94_core PUBLIC PkgConfig::JACK)
+    target_compile_definitions(addu94_core PRIVATE ADDU94_HAVE_JACK)
+endif()
 target_compile_features(addu94_core PUBLIC cxx_std_26)
 addu94_apply_warnings(addu94_core)
 # Sanitize the core lib too when enabled: uninstrumented code inside an

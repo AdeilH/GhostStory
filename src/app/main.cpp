@@ -3,6 +3,7 @@
 // Single binary, subcommand CLI (headless-first). The GUI (M4+) is entered
 // via the default command when a display is available; all subcommands work
 // headless so CI never needs one.
+#include "app/calibrate.hpp"
 #include "app/play_engine.hpp"
 #include "project/smf.hpp"
 #include "project/export_wav.hpp"
@@ -42,6 +43,7 @@ void print_usage() {
         "  repair        Verify/rebuild config, journal, samples, manifest\n"
         "  bench         Run benchmark suite, write bench-report.json\n"
         "  probe         Probe connected MIDI devices, write device manifest\n"
+        "  calibrate     Map the 8 hardware knobs to CCs (writes profile.toml)\n"
         "  play          Launch the app (native GUI; --headless keeps the\n"
         "                console loop, --seconds N auto-stops after N s)\n"
         "  version       Print version\n"
@@ -145,10 +147,12 @@ int cmd_probe(bool capture) {
     return result.device_found ? 0 : 3;
 }
 
-int cmd_bench(int seconds) {
+int cmd_bench(int seconds, bool trace) {
     addu94::log::Logger::init("", addu94::log::Level::Info);
     std::printf("addu94 bench: %d s audio callback load test...\n", seconds);
-    auto const rep = addu94::ops::run_bench(seconds, "bench-report.json");
+    auto const rep = addu94::ops::run_bench(
+        seconds, "bench-report.json",
+        trace ? "callback-trace.json" : std::string{});
     std::printf(
         "backend=%s %uHz %u frames | callbacks=%llu xruns=%llu\n"
         "callback us: p50=%.0f p95=%.0f p99=%.0f max=%u (p99 = %.1f%% of "
@@ -202,12 +206,15 @@ int main(int argc, char const** argv) {
     }
     if (cmd == "bench") {
         int seconds = 60;
-        for (int i = 2; i + 1 < argc; ++i) {
-            if (std::string_view{argv[i]} == "--seconds") {
+        bool trace = false;
+        for (int i = 2; i < argc; ++i) {
+            if (std::string_view{argv[i]} == "--seconds" && i + 1 < argc) {
                 seconds = std::atoi(argv[i + 1]);
+            } else if (std::string_view{argv[i]} == "--trace") {
+                trace = true;
             }
         }
-        return cmd_bench(seconds);
+        return cmd_bench(seconds, trace);
     }
 
     // Milestone-gated commands: exist as surface, fail honestly until their
@@ -267,6 +274,13 @@ int main(int argc, char const** argv) {
             std::this_thread::sleep_for(
                 std::chrono::milliseconds(interval_ms));
         }
+    }
+    if (cmd == "calibrate") {
+        char const* out = nullptr;
+        for (int i = 2; i + 1 < argc; ++i) {
+            if (std::string_view{argv[i]} == "--out") out = argv[i + 1];
+        }
+        return addu94::app::cmd_calibrate(out);
     }
     if (cmd == "export") {
         char const* project_dir = nullptr;
