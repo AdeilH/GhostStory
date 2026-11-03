@@ -3,11 +3,13 @@
 Milestones per BUILD PROMPT §10, in order, with acceptance gates.
 Status: ☐ todo · ◐ in progress · ☑ done
 
-- ☐ **M0 — Scaffolding & ADRs** — repo, CMake+Ninja, CI gate, ADRs, logging.
-  *Gate: `make ci` green.*
-- ☐ **M1 — MIDI engine + probe** — ALSA seq client, timestamps, device
+- ☑ **M0 — Scaffolding & ADRs** — repo, CMake+Ninja, CI gate, ADRs, logging.
+  *Gate: `make ci` green.* **DONE 2026-11-03.**
+- ☑ **M1 — MIDI engine + probe** — ALSA seq client, timestamps, device
   detection, manifest, SysEx capture.
-  *Gate: unit + virtual-port tests; probe writes valid manifest.*
+  *Gate: unit + virtual-port tests; probe writes valid manifest.* **DONE
+  2026-11-03** (first live detection: MPK Mini MK3, client 20; identity
+  request answered=no — verify on-device during M4 work).
 - ☐ **M2 — Audio engine** — PipeWire out (JACK/ALSA fallback), metronome,
   sample-accurate transport. *Gate: p99 callback < 30% buffer, 0 xruns/5 min.*
 - ☐ **M3 — First playable** — keys→synth, sustain, octave, velocity curves,

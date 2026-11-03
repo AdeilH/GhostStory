@@ -1,7 +1,7 @@
 # addu94 — tests
 set(A94_TEST_LIBS addu94_core)
 
-foreach(t spsc_queue mpmc_queue logger json)
+foreach(t spsc_queue mpmc_queue logger json midi)
     add_executable(test_${t} test_${t}.cpp)
     target_include_directories(test_${t} SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_party)
     target_link_libraries(test_${t} PRIVATE ${A94_TEST_LIBS})

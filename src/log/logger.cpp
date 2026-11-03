@@ -10,7 +10,7 @@ namespace addu94::log {
 namespace {
 std::string_view json_escape(std::string_view in, char (&out)[256]) noexcept {
     std::size_t n = 0;
-    for (char c : in) {
+    for (char const c : in) {
         if (n >= 250) break;
         switch (c) {
         case '"': out[n++] = '\\'; out[n++] = '"'; break;

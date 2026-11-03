@@ -18,10 +18,11 @@
 
 #include <atomic>
 #include <cstdint>
-#include <functional>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <utility>
 #include <vector>
 
 namespace addu94::midi {
@@ -47,10 +48,13 @@ struct DeviceEvent {
 
 /// Consumer of decoded MIDI. on_midi is called from the input thread —
 /// implementations must be RT-safe (no locks, no allocation, no logging).
+/// on_sysex_raw is optional (probe/capture); it receives the complete
+/// F0..F7 payload including delimiters.
 struct EventSink {
     virtual ~EventSink() = default;
     virtual void on_midi(MidiEvent const& ev) = 0;
     virtual void on_device_event(DeviceEvent const& de) = 0;
+    virtual void on_sysex_raw(std::uint8_t const* /*data*/, std::size_t /*len*/) {}
 };
 
 class AlsaClient {
@@ -71,6 +75,12 @@ public:
 
     [[nodiscard]] bool is_open() const noexcept { return seq_ != nullptr; }
     [[nodiscard]] int client_id() const noexcept { return client_id_; }
+    /// Port ids (for tests / advanced routing).
+    [[nodiscard]] int input_port() const noexcept { return in_port_; }
+    [[nodiscard]] int output_port() const noexcept { return out_port_; }
+    [[nodiscard]] int virtual_port() const noexcept { return virt_port_; }
+    /// Raw handle — only for tests and probe (never on the RT path).
+    [[nodiscard]] snd_seq_t* raw() noexcept { return seq_; }
 
     /// Enumerate all readable MIDI ports (non-RT).
     [[nodiscard]] static std::vector<PortRef> enumerate_input_ports();

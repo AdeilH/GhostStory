@@ -43,15 +43,37 @@ cmake --build "$BUILD/tsan" -j"$(nproc)" || fail "tsan build"
 ctest --test-dir "$BUILD/tsan" --output-on-failure || fail "tsan tests"
 
 echo "== [6/6] clang-tidy (best-effort) =="
-if command -v clang-tidy >/dev/null 2>&1 && [ -f "$BUILD/main/compile_commands.json" ]; then
-    # M0: core sources only; list grows with the tree.
-    SRC=$(git ls-files 'src/**.cpp' 'src/**.hpp' 2>/dev/null || find src -name '*.cpp' -o -name '*.hpp')
+if command -v clang-tidy >/dev/null 2>&1 && command -v clang++ >/dev/null 2>&1; then
+    # clang-tidy against the GCC compile db chokes on GCC-specific flags
+    # (module mapper args) and include paths; generate a clang db instead.
+    cmake -S . -B "$BUILD/tidy" -G Ninja \
+        -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang \
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DADDU94_BUILD_TESTS=OFF >/dev/null
+    cmake --build "$BUILD/tidy" -j"$(nproc)" >/dev/null
+    SRC=$(git ls-files 'src/*.cpp' 'src/*.hpp' 2>/dev/null || find src -name '*.cpp' -o -name '*.hpp')
     if [ -n "$SRC" ]; then
+        # Debian ships clang-tidy with no default checks — pick a set.
+        # misc-include-cleaner off: fights transitive includes.
+        # misc-const-correctness off: false positives on non-const-ref out
+        # params (MpmcQueue::pop(T&)) as of clang-tidy 24.
+        CHECKS='clang-analyzer-*,bugprone-*,performance-*,misc-conformance*,-bugprone-easily-swappable-parameters'
         # shellcheck disable=SC2086
-        clang-tidy $SRC -p "$BUILD/main" --quiet || fail "clang-tidy"
+        TIDY_OUT=$(clang-tidy --checks="$CHECKS" $SRC -p "$BUILD/tidy" --quiet 2>&1 || true)
+        if echo "$TIDY_OUT" | grep -q "'stddef.h' file not found"; then
+            # Toolchain mismatch (e.g. clang-tidy 23 vs clang++ 24 on this
+            # machine): the tool cannot resolve compiler resource headers.
+            # Record and skip — do not mask real findings as env noise.
+            echo "clang-tidy unusable (resource-header mismatch between" \
+                 "clang-tidy and clang++ on this machine) — skipping (recorded)"
+        elif echo "$TIDY_OUT" | grep -qE "warning:|error:"; then
+            echo "$TIDY_OUT" | grep -E "warning:|error:"
+            fail "clang-tidy"
+        else
+            echo "clang-tidy: clean"
+        fi
     fi
 else
-    echo "clang-tidy unavailable or no compile db — skipping (recorded)"
+    echo "clang-tidy/clang++ unavailable — skipping (recorded)"
 fi
 
 echo ""

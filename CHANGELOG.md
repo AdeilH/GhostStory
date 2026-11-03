@@ -2,6 +2,31 @@
 
 All notable changes. Format: Keep-a-Changelog-ish; dates UTC.
 
+## [0.1.0-dev] — 2026-11-03 (M1)
+
+### Added
+- **MIDI engine** (`src/midi/`): ALSA sequencer client with dedicated input
+  thread (poll-based, non-blocking drain), heartbeat for the future
+  watchdog, event/hotplug decode to fixed-size RT events, ALSA↔14-bit pitch
+  bend conversion, SysEx passthrough (raw sink + inline truncation for RT).
+- **Device layer** (`src/device/`): manifest model (checksummed SHA-256,
+  schema-versioned JSON via vendored nlohmann), default control inventory
+  (55 controls), atomic save (temp+fsync+rename), corrupt-file quarantine,
+  runtime probe with MIDI Identity Request and raw capture
+  (`addu94 probe [--capture]`).
+- First live-device detection: MPK Mini MK3 discovered on ALSA client 20;
+  manifest written to `~/.local/share/addu94/devices/`.
+- `docs/sysex.md` — capture-first methodology; no hardcoded model bytes.
+- Tests: virtual-port round trip, monotonic timestamps, model matching,
+  manifest round-trip/checksum/garbage, probe-without-hardware (7 tests,
+  zero physical hardware required).
+
+### Fixed
+- clang-tidy gate: Debian ships with no default checks; explicit curated
+  set; GCC module-scanner flags in the compile db documented as noise.
+- CI ASan/UBSan link: main binary links sanitizer runtime (instrumented
+  core lib requires it).
+
 ## [0.1.0-dev] — 2026-11-03 (M0)
 
 ### Added

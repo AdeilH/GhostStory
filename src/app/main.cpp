@@ -3,6 +3,7 @@
 // Single binary, subcommand CLI (headless-first). The GUI (M4+) is entered
 // via the default command when a display is available; all subcommands work
 // headless so CI never needs one.
+#include "device/probe.hpp"
 #include "log/logger.hpp"
 
 #include <cstdio>
@@ -53,9 +54,35 @@ int cmd_doctor() {
     return 0;
 }
 
+int cmd_probe(bool capture) {
+    addu94::device::Probe probe;
+    int const seconds = capture ? 60 : 0;
+    std::printf("addu94 probe: scanning ALSA MIDI ports%s...\n",
+                capture ? " (60 s capture)" : "");
+    auto result = probe.run(seconds);
+    std::puts(result.summary.c_str());
+    if (!result.manifest.model.empty()) {
+        // Auto-save manifest so the mapping layer is manifest-driven from
+        // the very first run (spec §1).
+        auto const path = addu94::device::manifest_path();
+        if (addu94::device::save_manifest(result.manifest, path)) {
+            std::printf("manifest written: %s\n", path.c_str());
+        } else {
+            std::fprintf(stderr, "failed to write manifest: %s\n",
+                         path.c_str());
+            return 1;
+        }
+    }
+    if (capture && !probe.captured().empty()) {
+        std::printf("captured %zu raw message(s); see docs/sysex.md\n",
+                    probe.captured().size());
+    }
+    return result.device_found ? 0 : 3;
+}
+
 }  // namespace
 
-int main(int argc, char** argv) {
+int main(int argc, char const** argv) {
     if (argc < 2) {
         print_usage();
         return 0;
@@ -67,10 +94,17 @@ int main(int argc, char** argv) {
     }
     if (cmd == "version" || cmd == "--version") return cmd_version();
     if (cmd == "doctor") return cmd_doctor();
+    if (cmd == "probe") {
+        bool capture = false;
+        for (int i = 2; i < argc; ++i) {
+            if (std::string_view{argv[i]} == "--capture") capture = true;
+        }
+        return cmd_probe(capture);
+    }
 
     // Milestone-gated commands: exist as surface, fail honestly until their
     // milestone lands.
-    if (cmd == "repair" || cmd == "bench" || cmd == "probe" || cmd == "play") {
+    if (cmd == "repair" || cmd == "bench" || cmd == "play") {
         std::fprintf(stderr,
                      "addu94: command '%s' is not implemented yet "
                      "(planned milestone; see ROADMAP.md)\n",
