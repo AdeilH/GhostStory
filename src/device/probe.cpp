@@ -38,7 +38,7 @@ struct CaptureSink : midi::EventSink {
     midi::AlsaClient* client{nullptr};
     std::atomic<std::uint64_t> sysex_seen{0};
     std::string identity_info;
-    bool got_identity{false};
+    std::atomic<bool> got_identity{false};
 
     void on_midi(midi::MidiEvent const&) override {}
     void on_device_event(midi::DeviceEvent const&) override {}

@@ -3,13 +3,17 @@
 // Single binary, subcommand CLI (headless-first). The GUI (M4+) is entered
 // via the default command when a display is available; all subcommands work
 // headless so CI never needs one.
+#include "app/play_engine.hpp"
 #include "device/probe.hpp"
 #include "log/logger.hpp"
+#include "ops/bench.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <format>
 #include <string_view>
+#include <thread>
 
 namespace {
 
@@ -35,6 +39,32 @@ void print_usage() {
 
 int cmd_version() {
     std::puts(std::format("addu94 {}", kVersion).c_str());
+    return 0;
+}
+
+int cmd_play(int auto_stop_seconds) {
+    addu94::log::Logger::init("", addu94::log::Level::Info);
+    addu94::app::PlayEngine engine;
+    std::string error;
+    if (!engine.start(error)) {
+        std::fprintf(stderr, "addu94: failed to start: %s\n", error.c_str());
+        addu94::log::Logger::shutdown();
+        return 1;
+    }
+    std::printf(
+        "addu94 is live. Play your MPK Mini — keys make sound, pads fire "
+        "chord slots, knobs mix.\n");
+    if (auto_stop_seconds > 0) {
+        std::printf("(auto-stop after %d s)\n", auto_stop_seconds);
+        std::this_thread::sleep_for(std::chrono::seconds(auto_stop_seconds));
+    } else {
+        std::printf("(Ctrl-C to quit)\n");
+        for (;;) std::this_thread::sleep_for(std::chrono::hours(1));
+    }
+    std::printf("voices active: %d, audio running: %d\n", engine.active_voices(),
+                engine.audio_running() ? 1 : 0);
+    engine.stop();
+    addu94::log::Logger::shutdown();
     return 0;
 }
 
@@ -80,6 +110,24 @@ int cmd_probe(bool capture) {
     return result.device_found ? 0 : 3;
 }
 
+int cmd_bench(int seconds) {
+    addu94::log::Logger::init("", addu94::log::Level::Info);
+    std::printf("addu94 bench: %d s audio callback load test...\n", seconds);
+    auto const rep = addu94::ops::run_bench(seconds, "bench-report.json");
+    std::printf(
+        "backend=%s %uHz %u frames | callbacks=%llu xruns=%llu\n"
+        "callback us: p50=%.0f p95=%.0f p99=%.0f max=%u (p99 = %.1f%% of "
+        "buffer budget, gate < 30%%)\n"
+        "rss=%ld kB | report: bench-report.json | gate: %s\n",
+        rep.backend.c_str(), rep.sample_rate, rep.buffer_size,
+        static_cast<unsigned long long>(rep.callbacks),
+        static_cast<unsigned long long>(rep.xruns), rep.p50_us, rep.p95_us,
+        rep.p99_us, rep.max_us, rep.p99_budget_pct, rep.rss_kb,
+        rep.gate_pass ? "PASS" : "FAIL");
+    addu94::log::Logger::shutdown();
+    return rep.gate_pass ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char const** argv) {
@@ -101,10 +149,28 @@ int main(int argc, char const** argv) {
         }
         return cmd_probe(capture);
     }
+    if (cmd == "bench") {
+        int seconds = 60;
+        for (int i = 2; i + 1 < argc; ++i) {
+            if (std::string_view{argv[i]} == "--seconds") {
+                seconds = std::atoi(argv[i + 1]);
+            }
+        }
+        return cmd_bench(seconds);
+    }
 
     // Milestone-gated commands: exist as surface, fail honestly until their
     // milestone lands.
-    if (cmd == "repair" || cmd == "bench" || cmd == "play") {
+    if (cmd == "play") {
+        int seconds = 0;
+        for (int i = 2; i + 1 < argc; ++i) {
+            if (std::string_view{argv[i]} == "--seconds") {
+                seconds = std::atoi(argv[i + 1]);
+            }
+        }
+        return cmd_play(seconds);
+    }
+    if (cmd == "repair") {
         std::fprintf(stderr,
                      "addu94: command '%s' is not implemented yet "
                      "(planned milestone; see ROADMAP.md)\n",

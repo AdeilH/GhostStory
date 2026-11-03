@@ -2,6 +2,42 @@
 
 All notable changes. Format: Keep-a-Changelog-ish; dates UTC.
 
+## [0.1.0-dev] — 2026-11-03 (M2 + M3)
+
+### Added
+- **Audio engine**: PipeWire-native playback backend (pw_stream, RT-safe
+  callback, measured 5-min bench: 28125 callbacks, 0 xruns, p99 = 6 µs =
+  0.1% of buffer budget — gate PASS); backend factory ready for JACK/ALSA
+  fallbacks.
+- **Transport**: sample-accurate, integer position, buffer-boundary tempo
+  changes, exact loop wrap, control-plane state requests (play/stop/record
+  via atomics, never cross-thread plain writes); metronome with
+  bit-deterministic click synthesis; 9 property tests on clock math.
+- **Subtractive synth**: 2 osc + unison(3) w/ constant-power pan, ADSR,
+  Chamberlin SVF (LP12/LP24/HP12/BP12) w/ keytrack, LFO→filter/pitch/amp,
+  voice stealing, click-free release, panic; agent-built + selftested
+  (extreme-params stable), 5 in-tree tests.
+- **Mapping layer**: modes (PLAY/EDIT/STEP), knob CC bindings from
+  profile.toml (default profile embedded TOML parsed by our own parser),
+  pad actions fire on release, two-pad chords (undo/redo, mode switches),
+  controller-mirror state; minimal TOML parser (fuzz-lite tested).
+- **First playable** (`addu94 play`): MPK keys → velocity-curved synth →
+  speakers; pads → chord slots; knobs → mix/synth; sustain pedal CC64;
+  loop recorder with quantize-on-record, take-based overdub + per-take
+  undo (M3 gate: record/overdub/undo round-trip tests green).
+- Music tools: velocity curves (log default — mini keys), quantizer
+  (1/4..1/16T, strength), scale-lock tables (constexpr), arp
+  (up/down/up-down/random/order/chord, octave stack) + note repeat.
+- Project layer: document JSON serialization, WAL journal (per-append
+  fsync, corrupt-tail tolerance, atomic save w/ rotate), 16 tests incl.
+  crash simulations.
+
+### Fixed
+- TSan: probe identity flag raced across threads (now atomic) — caught by
+  gate on first run with the new probe flow.
+- Test framework: CHECK_EQ bound references to temporaries' elements
+  (dangling) — now copies; a latent garbage-read class of test bugs gone.
+
 ## [0.1.0-dev] — 2026-11-03 (M1)
 
 ### Added

@@ -75,8 +75,8 @@ inline void report_failure(char const* file, int line, std::string const& msg) {
 
 #define CHECK_EQ(a, b)                                                        \
     do {                                                                      \
-        auto const& a94_va_ = (a);                                            \
-        auto const& a94_vb_ = (b);                                            \
+        auto a94_va_ = (a);  /* copy: may reference a temporary's element */  \
+        auto a94_vb_ = (b);                                                   \
         if (!(a94_va_ == a94_vb_)) {                                          \
             ::addu94::test::report_failure(                                   \
                 __FILE__, __LINE__,                                           \

@@ -24,17 +24,31 @@ option(ADDU94_SANITIZE "Sanitizers for test targets: off|asan|tsan" "off")
 
 find_package(Threads REQUIRED)
 find_package(ALSA REQUIRED)
+include(FindPkgConfig)
+pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
 
 # First-party core (grows per milestone).
 add_library(addu94_core STATIC
     src/log/logger.cpp
+    src/core/toml_min.cpp
     src/midi/alsa_client.cpp
+    src/audio/pipewire_backend.cpp
+    src/audio/backends.cpp
+    src/audio/engine.cpp
+    src/audio/synth.cpp
+    src/app/play_engine.cpp
+    src/music/transport.cpp
+    src/mapping/mapping.cpp
+    src/project/smf.cpp
+    src/project/document.cpp
+    src/project/journal.cpp
+    src/ops/bench.cpp
     src/device/manifest.cpp
     src/device/probe.cpp
 )
 target_include_directories(addu94_core PUBLIC src)
 target_include_directories(addu94_core SYSTEM PUBLIC ${CMAKE_SOURCE_DIR}/third_party)
-target_link_libraries(addu94_core PUBLIC Threads::Threads ALSA::ALSA)
+target_link_libraries(addu94_core PUBLIC Threads::Threads ALSA::ALSA PkgConfig::PIPEWIRE)
 target_compile_features(addu94_core PUBLIC cxx_std_26)
 addu94_apply_warnings(addu94_core)
 # Sanitize the core lib too when enabled: uninstrumented code inside an
