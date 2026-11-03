@@ -6,6 +6,7 @@
 // audio or hardware (virtual MIDI feeds it in CI).
 #pragma once
 
+#include <cstdint>
 #include "music/clip.hpp"
 #include "music/quantize.hpp"
 

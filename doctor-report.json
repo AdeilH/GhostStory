@@ -1,0 +1,35 @@
+{
+  "checks": [
+    {
+      "detail": "available",
+      "name": "audio backend: pipewire",
+      "status": "pass"
+    },
+    {
+      "detail": "no MPK Mini attached",
+      "name": "midi ports (3)",
+      "status": "warn"
+    },
+    {
+      "detail": "model=mpk-mini",
+      "name": "device manifest",
+      "status": "pass"
+    },
+    {
+      "detail": "136752 MB free",
+      "name": "disk space",
+      "status": "pass"
+    },
+    {
+      "detail": "RT bandwidth throttled (1000000 µs/s) — audio threads still OK, addu94 uses normal scheduling for MIDI",
+      "name": "realtime limits",
+      "status": "warn"
+    },
+    {
+      "detail": "no journal (nothing to check)",
+      "name": "journal",
+      "status": "pass"
+    }
+  ],
+  "schema": 1
+}

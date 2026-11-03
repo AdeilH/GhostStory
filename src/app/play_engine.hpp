@@ -10,8 +10,10 @@
 //   App/Qt thread: mapping decisions, recorder, transport commands, UI.
 #pragma once
 
+#include <cstdint>
 #include "audio/engine.hpp"
 #include "audio/synth.hpp"
+#include "audio/drum_kit.hpp"
 #include "core/spsc_queue.hpp"
 #include "mapping/mapping.hpp"
 #include "midi/alsa_client.hpp"
@@ -119,6 +121,7 @@ private:
     midi::AlsaClient midi_;
     mapping::MappingEngine mapping_;
     audio::Synth synth_;
+    audio::DrumKit drums_;
     music::Recorder recorder_;
     music::Clip clip_;
 

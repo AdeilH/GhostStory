@@ -32,6 +32,10 @@ void PlayEngine::render_trampoline(float* l, float* r, std::uint32_t f,
 }
 
 bool PlayEngine::start(std::string& error) {
+    // Synthesized fallback kit (spec §4.1: playable out of the box).
+    if (!drums_.init(48000.0, error)) {
+        log::warn("app", "drum kit init failed: {}", error);
+    }
     // Audio first (it owns the clock), then MIDI.
     audio::BackendConfig cfg;
     std::string why;
@@ -117,6 +121,18 @@ void PlayEngine::on_midi(midi::MidiEvent const& ev) {
         // Notes on channels 0/1 go to the instrument (RT queue); channel 9
         // (pads) is control-plane → app queue. Both also reach the app for
         // recording/mirror state.
+        if (ev.channel == 9 && ev.is_note_on() && ev.note() >= 36 &&
+            ev.note() <= 51) {
+            VoiceCmd vc{};
+            vc.channel = 9;
+            vc.note = static_cast<std::uint8_t>(ev.note());
+            vc.velocity = static_cast<std::uint8_t>(
+                std::min(127, music::apply_velocity_curve(vel_curve_, ev.d2)));
+            vc.on = true;
+            if (!synth_q_.push(vc)) {
+                log::warn("app", "synth queue full — drum hit dropped");
+            }
+        }
         if (ev.channel != 9 && !arp_on_.load(std::memory_order_acquire)) {
             int n = ev.note() + octave_ * 12;
             if (scale_lock_.load(std::memory_order_acquire)) {
@@ -301,6 +317,9 @@ void PlayEngine::render_into(float* left, float* right,
     while (synth_q_.pop(vc)) {
         if (vc.kind == VoiceCmd::Kind::PedalOff) {
             synth_.all_sound_off();
+        } else if (vc.on && vc.channel == 9) {
+            drums_.note_on(vc.note,
+                           static_cast<float>(vc.velocity) / 127.0f);
         } else if (vc.on) {
             synth_.note_on(vc.channel, vc.note,
                            static_cast<float>(vc.velocity) / 127.0f);
@@ -309,6 +328,7 @@ void PlayEngine::render_into(float* left, float* right,
         }
     }
     synth_.render(left, right, frames);
+    drums_.render(left, right, frames);
     float const vol = track_volume_;
     if (vol != 1.0f) {
         for (std::uint32_t i = 0; i < frames; ++i) {

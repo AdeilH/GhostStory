@@ -37,6 +37,12 @@ add_library(addu94_core STATIC
     src/audio/backends.cpp
     src/audio/engine.cpp
     src/audio/synth.cpp
+    src/audio/wav_file.cpp
+    src/audio/sampler.cpp
+    src/audio/drum_kit.cpp
+    src/audio/fx.cpp
+    src/audio/render_engine.cpp
+    src/project/export_wav.cpp
     src/app/play_engine.cpp
     src/music/transport.cpp
     src/mapping/mapping.cpp
@@ -45,6 +51,8 @@ add_library(addu94_core STATIC
     src/project/document.cpp
     src/project/journal.cpp
     src/ops/bench.cpp
+    src/ops/watchdog.cpp
+    src/ops/doctor.cpp
     src/device/manifest.cpp
     src/device/probe.cpp
 )

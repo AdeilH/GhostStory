@@ -5,10 +5,14 @@
 // headless so CI never needs one.
 #include "app/play_engine.hpp"
 #include "project/smf.hpp"
+#include "project/export_wav.hpp"
 #include "project/journal.hpp"
 #include "device/probe.hpp"
 #include "log/logger.hpp"
 #include "ops/bench.hpp"
+#include "ops/doctor.hpp"
+
+#include <fstream>
 
 #if defined(ADDU94_UI_ENABLED)
 #include "ui/app_gui.hpp"
@@ -96,20 +100,20 @@ int cmd_play(int auto_stop_seconds, bool headless, char const* project_dir) {
     return rc;
 }
 
-int cmd_doctor() {
-    // M7 delivers the full doctor; M0 ships the skeleton with honest
-    // "not yet implemented" statuses so the command surface exists.
-    using addu94::log::Level;
-    addu94::log::Logger::init("", Level::Info);
-    addu94::log::info("doctor", "addu94 doctor {} — skeleton (full checks land in M7)", kVersion);
-    std::puts("addu94 doctor (skeleton)\n"
-              "  [ ] audio graph .............. (M7)\n"
-              "  [ ] midi ports ............... (M7)\n"
-              "  [ ] realtime permissions ..... (M7)\n"
-              "  [ ] config integrity ......... (M7)\n"
-              "  [ ] disk space ............... (M7)");
+int cmd_doctor(bool repair) {
+    addu94::log::Logger::init("", addu94::log::Level::Error);
+    auto const rep = repair ? addu94::ops::run_repair()
+                            : addu94::ops::run_doctor();
+    std::fputs(std::format("addu94 {} report\n", repair ? "repair" : "doctor")
+                   .c_str(),
+               stdout);
+    std::fputs(rep.to_text().c_str(), stdout);
+    std::ofstream f(repair ? "repair-report.json" : "doctor-report.json");
+    f << rep.to_json();
+    std::printf("report: %s\n", repair ? "repair-report.json"
+                                        : "doctor-report.json");
     addu94::log::Logger::shutdown();
-    return 0;
+    return rep.all_pass() ? 0 : 1;
 }
 
 int cmd_probe(bool capture) {
@@ -169,7 +173,9 @@ int main(int argc, char const** argv) {
         return 0;
     }
     if (cmd == "version" || cmd == "--version") return cmd_version();
-    if (cmd == "doctor") return cmd_doctor();
+    if (cmd == "doctor" || cmd == "repair") {
+        return cmd_doctor(cmd == "repair");
+    }
     if (cmd == "probe") {
         bool capture = false;
         for (int i = 2; i < argc; ++i) {
@@ -253,11 +259,14 @@ int main(int argc, char const** argv) {
                 project_dir = argv[i + 1];
             } else if (std::string_view{argv[i]} == "--smf") {
                 out = argv[i + 1];
+            } else if (std::string_view{argv[i]} == "--wav-dir") {
+                out = argv[i + 1];
             }
         }
         if (project_dir == nullptr || out == nullptr) {
             std::fprintf(stderr,
-                         "usage: addu94 export --project-dir DIR --smf OUT.mid\n");
+                         "usage: addu94 export --project-dir DIR "
+                         "(--smf OUT.mid | --wav-dir DIR)\n");
             return 2;
         }
         addu94::project::Project p;
@@ -270,22 +279,39 @@ int main(int argc, char const** argv) {
             std::fprintf(stderr, "addu94: nothing to export (no clips)\n");
             return 3;
         }
-        auto const bytes = addu94::project::export_smf_type1(
-            p.tracks[0].clips[0], p.tempo_bpm, p.meter_num, p.meter_den);
-        if (!addu94::project::write_smf_file(out, bytes)) {
-            std::fprintf(stderr, "addu94: cannot write %s\n", out);
+        if (std::string_view{out}.ends_with(".mid")) {
+            auto const bytes = addu94::project::export_smf_type1(
+                p.tracks[0].clips[0], p.tempo_bpm, p.meter_num, p.meter_den);
+            if (!addu94::project::write_smf_file(out, bytes)) {
+                std::fprintf(stderr, "addu94: cannot write %s\n", out);
+                return 1;
+            }
+            std::printf("wrote %s (%zu bytes)\n", out, bytes.size());
+            return 0;
+        }
+        if (std::string_view{out} == "--wav-dir") {
+            std::fprintf(stderr, "addu94: use --wav-dir DIR as the value\n");
+            return 2;
+        }
+        // WAV stems + master (spec §2.7): render the recorded clip through
+        // synth + drums + FX offline.
+        addu94::project::ExportSpec spec;
+        spec.output_dir = out;
+        addu94::audio::RenderRequest req;
+        req.clip = &p.tracks[0].clips[0];
+        req.tempo_bpm = p.tempo_bpm;
+        req.sample_rate = 48000.0;
+        spec.tracks.push_back(req);
+        std::string err;
+        if (!addu94::project::export_wav_stems(spec, err)) {
+            std::fprintf(stderr, "addu94: wav export failed: %s\n",
+                         err.c_str());
             return 1;
         }
-        std::printf("wrote %s (%zu bytes)\n", out, bytes.size());
+        std::printf("wrote stems + master to %s\n", out);
         return 0;
     }
-    if (cmd == "repair") {
-        std::fprintf(stderr,
-                     "addu94: command '%s' is not implemented yet "
-                     "(planned milestone; see ROADMAP.md)\n",
-                     std::string{cmd}.c_str());
-        return 2;
-    }
+
     std::fprintf(stderr, "addu94: unknown command '%s'\n\n",
                  std::string{cmd}.c_str());
     print_usage();

@@ -5,6 +5,7 @@
 // until stopped), and write the manifest. All empirical — nothing hardcoded.
 #pragma once
 
+#include <cstdint>
 #include "device/manifest.hpp"
 #include "midi/alsa_client.hpp"
 

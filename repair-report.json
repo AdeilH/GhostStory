@@ -1,0 +1,20 @@
+{
+  "checks": [
+    {
+      "detail": "manifest healthy; kept",
+      "name": "manifest re-probe",
+      "status": "pass"
+    },
+    {
+      "detail": "no journal present",
+      "name": "journal replay",
+      "status": "pass"
+    },
+    {
+      "detail": "config schema v1 (no migration needed)",
+      "name": "config integrity",
+      "status": "pass"
+    }
+  ],
+  "schema": 1
+}
