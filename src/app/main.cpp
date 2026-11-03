@@ -10,7 +10,9 @@
 #include "device/probe.hpp"
 #include "log/logger.hpp"
 #include "ops/bench.hpp"
+#include "ops/crash_handler.hpp"
 #include "ops/doctor.hpp"
+#include "ops/telemetry.hpp"
 
 #include <fstream>
 
@@ -69,6 +71,7 @@ int cmd_play(int auto_stop_seconds, bool headless, char const* project_dir) {
         addu94::log::Logger::shutdown();
         return 1;
     }
+    addu94::ops::Telemetry::session_start();
     std::printf(
         "addu94 is live. Play your MPK Mini — keys make sound, pads fire "
         "chord slots, knobs mix.\n");
@@ -163,6 +166,20 @@ int cmd_bench(int seconds) {
 }  // namespace
 
 int main(int argc, char const** argv) {
+    // Crash handling + safe mode (spec §6.4/§6.5): install first; if the
+    // previous run crashed, surface the safe-mode offer.
+    bool const last_run_crashed = addu94::ops::CrashHandler::install();
+    bool const telemetry_opt_out =
+        std::getenv("ADDU94_TELEMETRY") != nullptr &&
+        std::string_view{std::getenv("ADDU94_TELEMETRY")} == "0";
+    addu94::ops::Telemetry::init(!telemetry_opt_out);
+    addu94::ops::Telemetry::event("launch", last_run_crashed ? "after-crash" : "");
+    if (last_run_crashed) {
+        std::fprintf(stderr,
+                     "addu94: previous run crashed. Reports in %s.\n"
+                     "        Run 'addu94 doctor' for diagnostics.\n",
+                     addu94::ops::CrashHandler::crash_dir().c_str());
+    }
     if (argc < 2) {
         print_usage();
         return 0;

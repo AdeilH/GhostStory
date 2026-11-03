@@ -42,10 +42,13 @@ cmake -S . -B "$BUILD/tsan" -G Ninja \
 cmake --build "$BUILD/tsan" -j"$(nproc)" || fail "tsan build"
 ctest --test-dir "$BUILD/tsan" --output-on-failure || fail "tsan tests"
 
-echo "== [6/7] kill -9 recovery gate (spec §6.3) =="
+echo "== [6/8] kill -9 recovery gate (spec §6.3) =="
 bash "$ROOT/scripts/test_kill9.sh" || fail "kill9 recovery"
 
-echo "== [7/7] clang-tidy (best-effort) =="
+echo "== [7/8] MIDI fuzz gate (spec §7.5) =="
+"$BUILD/main/fuzz_midi" 6 424242 || fail "fuzz_midi"
+
+echo "== [8/8] clang-tidy (best-effort) =="
 if command -v clang-tidy >/dev/null 2>&1 && command -v clang++ >/dev/null 2>&1; then
     # clang-tidy against the GCC compile db chokes on GCC-specific flags
     # (module mapper args) and include paths; generate a clang db instead.

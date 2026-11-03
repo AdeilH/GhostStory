@@ -53,6 +53,8 @@ add_library(addu94_core STATIC
     src/ops/bench.cpp
     src/ops/watchdog.cpp
     src/ops/doctor.cpp
+    src/ops/crash_handler.cpp
+    src/ops/telemetry.cpp
     src/device/manifest.cpp
     src/device/probe.cpp
 )
@@ -101,3 +103,9 @@ if(ADDU94_BUILD_TESTS)
 endif()
 
 install(TARGETS addu94 RUNTIME DESTINATION bin)
+
+# MIDI fuzz harness (spec §7.5) — dev/CI tool.
+add_executable(fuzz_midi tools/fuzz_midi/fuzz_midi.cpp)
+target_link_libraries(fuzz_midi PRIVATE addu94_core)
+addu94_apply_warnings(fuzz_midi)
+addu94_apply_sanitizers(fuzz_midi)

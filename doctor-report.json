@@ -6,9 +6,9 @@
       "status": "pass"
     },
     {
-      "detail": "no MPK Mini attached",
-      "name": "midi ports (3)",
-      "status": "warn"
+      "detail": "MPK Mini detected",
+      "name": "midi ports (4)",
+      "status": "pass"
     },
     {
       "detail": "model=mpk-mini",
@@ -16,7 +16,7 @@
       "status": "pass"
     },
     {
-      "detail": "136752 MB free",
+      "detail": "135906 MB free",
       "name": "disk space",
       "status": "pass"
     },
