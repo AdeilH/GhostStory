@@ -4,6 +4,8 @@
 // via the default command when a display is available; all subcommands work
 // headless so CI never needs one.
 #include "app/play_engine.hpp"
+#include "project/smf.hpp"
+#include "project/journal.hpp"
 #include "device/probe.hpp"
 #include "log/logger.hpp"
 #include "ops/bench.hpp"
@@ -47,10 +49,17 @@ int cmd_version() {
     return 0;
 }
 
-int cmd_play(int auto_stop_seconds, bool headless) {
+int cmd_play(int auto_stop_seconds, bool headless, char const* project_dir) {
     addu94::log::Logger::init("", addu94::log::Level::Info);
     addu94::app::PlayEngine engine;
     std::string error;
+    if (project_dir != nullptr &&
+        !engine.attach_project(project_dir, error)) {
+        std::fprintf(stderr, "addu94: project load failed: %s\n",
+                     error.c_str());
+        addu94::log::Logger::shutdown();
+        return 1;
+    }
     if (!engine.start(error)) {
         std::fprintf(stderr, "addu94: failed to start: %s\n", error.c_str());
         addu94::log::Logger::shutdown();
@@ -190,7 +199,85 @@ int main(int argc, char const** argv) {
                 headless = true;
             }
         }
-        return cmd_play(seconds, headless);
+        char const* project_dir = nullptr;
+        for (int i = 2; i + 1 < argc; ++i) {
+            if (std::string_view{argv[i]} == "--project-dir") {
+                project_dir = argv[i + 1];
+            }
+        }
+        return cmd_play(seconds, headless, project_dir);
+    }
+    if (cmd == "selftest-record") {
+        // Kill -9 gate driver (spec §6.3): records synthetic notes through
+        // the real event queue → recorder → journal pipeline, forever (or
+        // --seconds N) until the test kills it. Not a user command.
+        char const* project_dir = nullptr;
+        int interval_ms = 50;
+        for (int i = 2; i + 1 < argc; ++i) {
+            if (std::string_view{argv[i]} == "--project-dir") {
+                project_dir = argv[i + 1];
+            } else if (std::string_view{argv[i]} == "--interval-ms") {
+                interval_ms = std::atoi(argv[i + 1]);
+            }
+        }
+        if (project_dir == nullptr) {
+            std::fprintf(stderr, "usage: selftest-record --project-dir DIR\n");
+            return 2;
+        }
+        addu94::log::Logger::init("", addu94::log::Level::Error);
+        addu94::app::PlayEngine engine;
+        std::string error;
+        if (!engine.attach_project(project_dir, error)) {
+            std::fprintf(stderr, "addu94: %s\n", error.c_str());
+            return 1;
+        }
+        engine.command({addu94::mapping::Action::TransportRecord, 0, 0});
+        int n = 0;
+        for (;;) {
+            bool const on = (n % 2) == 0;
+            int const note = 36 + ((n / 2) % 8);  // pair on/off of SAME note
+            engine.test_feed_note(9, note, 100, on);
+            std::vector<addu94::mapping::Command> const drained =
+                engine.drain_app_events();
+            (void)drained;
+            ++n;
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(interval_ms));
+        }
+    }
+    if (cmd == "export") {
+        char const* project_dir = nullptr;
+        char const* out = nullptr;
+        for (int i = 2; i + 1 < argc; ++i) {
+            if (std::string_view{argv[i]} == "--project-dir") {
+                project_dir = argv[i + 1];
+            } else if (std::string_view{argv[i]} == "--smf") {
+                out = argv[i + 1];
+            }
+        }
+        if (project_dir == nullptr || out == nullptr) {
+            std::fprintf(stderr,
+                         "usage: addu94 export --project-dir DIR --smf OUT.mid\n");
+            return 2;
+        }
+        addu94::project::Project p;
+        std::string error;
+        if (!addu94::project::load_project(project_dir, p, error)) {
+            std::fprintf(stderr, "addu94: %s\n", error.c_str());
+            return 1;
+        }
+        if (p.tracks.empty() || p.tracks[0].clips.empty()) {
+            std::fprintf(stderr, "addu94: nothing to export (no clips)\n");
+            return 3;
+        }
+        auto const bytes = addu94::project::export_smf_type1(
+            p.tracks[0].clips[0], p.tempo_bpm, p.meter_num, p.meter_den);
+        if (!addu94::project::write_smf_file(out, bytes)) {
+            std::fprintf(stderr, "addu94: cannot write %s\n", out);
+            return 1;
+        }
+        std::printf("wrote %s (%zu bytes)\n", out, bytes.size());
+        return 0;
     }
     if (cmd == "repair") {
         std::fprintf(stderr,

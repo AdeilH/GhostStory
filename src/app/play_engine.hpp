@@ -20,6 +20,7 @@
 #include "music/clip.hpp"
 #include "music/recorder.hpp"
 #include "music/velocity.hpp"
+#include "project/journal.hpp"
 
 #include <atomic>
 #include <string>
@@ -63,6 +64,26 @@ public:
     // --- commands (app thread) ---
     void command(mapping::Command const& c);
 
+    /// Test driver: inject a note through the SAME queue path as hardware
+    /// (event_q_ → drain_app_events → recorder/journal). Not used by the
+    /// shipped app paths.
+    bool test_feed_note(int channel, int note, int velocity, bool on) noexcept {
+        midi::MidiEvent ev{};
+        ev.type = on ? midi::Type::NoteOn : midi::Type::NoteOff;
+        ev.channel = static_cast<std::uint8_t>(channel);
+        ev.d1 = static_cast<std::uint8_t>(note);
+        ev.d2 = static_cast<std::uint8_t>(velocity);
+        ev.stamp_ns = 1;
+        return event_q_.push(ev);
+    }
+
+    // --- project persistence (spec §6.3/§8) ---
+    /// Attach a project dir: loads project.json + replays journal, then
+    /// keeps journaling live edits (clip records) with per-append fsync.
+    bool attach_project(std::string const& dir, std::string& error);
+    /// Full atomic save (journal checkpoint + project.json).
+    bool save_project(std::string& error);
+
     // --- scale-lock (spec §2.6) ---
     [[nodiscard]] bool scale_lock() const noexcept {
         return scale_lock_.load(std::memory_order_acquire);
@@ -82,6 +103,7 @@ private:
     static void render_trampoline(float* l, float* r, std::uint32_t f,
                                   void* user) noexcept;
     void process_arp() noexcept;  // app thread: strike grid crossings
+    void journal_new_events(std::size_t before);  // app thread
 
     // RT synth command (trivially copyable, rides the SPSC queue).
     struct VoiceCmd {
@@ -114,6 +136,10 @@ private:
 
     // Arp: held keys bypass synth when arp is on; arp strikes go via
     // synth_q_ on grid crossings (app thread → RT queue).
+    project::Journal journal_;
+    std::string project_dir_;
+    bool journal_open_{false};
+
     music::Arp arp_;
     std::atomic<bool> arp_on_{false};
     std::atomic<bool> scale_lock_{false};

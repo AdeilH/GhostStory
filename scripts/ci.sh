@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# addu94 — scripts/ci.sh : the local CI gate (mirrors what future hosted CI runs).
+# addu94 — scripts/ci.sh : the local CI gate (mirrors what future hosted CI runs).# addu94 — scripts/ci.sh : the local CI gate (mirrors what future hosted CI runs).
 # Gate order: format check (clang-format if present) -> clean build (GCC, Werror)
 # -> ctest (plain) -> ASan/UBSan test build & run -> TSan build & run (queue/transport)
 # -> clang-tidy (if present, best-effort).
@@ -42,7 +42,10 @@ cmake -S . -B "$BUILD/tsan" -G Ninja \
 cmake --build "$BUILD/tsan" -j"$(nproc)" || fail "tsan build"
 ctest --test-dir "$BUILD/tsan" --output-on-failure || fail "tsan tests"
 
-echo "== [6/6] clang-tidy (best-effort) =="
+echo "== [6/7] kill -9 recovery gate (spec §6.3) =="
+bash "$ROOT/scripts/test_kill9.sh" || fail "kill9 recovery"
+
+echo "== [7/7] clang-tidy (best-effort) =="
 if command -v clang-tidy >/dev/null 2>&1 && command -v clang++ >/dev/null 2>&1; then
     # clang-tidy against the GCC compile db chokes on GCC-specific flags
     # (module mapper args) and include paths; generate a clang db instead.

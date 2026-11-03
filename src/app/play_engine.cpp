@@ -3,7 +3,10 @@
 
 #include "log/logger.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
+#include <cstdlib>
 #include <cmath>
 
 namespace addu94::app {
@@ -56,6 +59,46 @@ bool PlayEngine::start(std::string& error) {
             log::info("app", "connected {}", p.client_name);
         }
     }
+    return true;
+}
+
+bool PlayEngine::attach_project(std::string const& dir, std::string& error) {
+    project_dir_ = dir;
+    if (dir.empty()) return true;  // ephemeral mode (tests)
+    project::Project p;
+    if (!project::load_project(dir, p, error)) {
+        return false;
+    }
+    // Adopt loaded tempo/meter/loop into the transport control plane.
+    auto& ctrl = audio_.transport_control();
+    ctrl.tempo_bpm.store(p.tempo_bpm);
+    ctrl.meter_num.store(static_cast<std::uint8_t>(p.meter_num));
+    ctrl.meter_den.store(static_cast<std::uint8_t>(p.meter_den));
+    if (!journal_.open(dir, error)) return false;
+    journal_open_ = true;
+    // Replay existing clip content into the working clip (track 0 clip 0).
+    if (!p.tracks.empty() && !p.tracks[0].clips.empty()) {
+        clip_ = p.tracks[0].clips[0];
+    }
+    log::info("app", "project loaded from {}", dir);
+    return true;
+}
+
+bool PlayEngine::save_project(std::string& error) {
+    if (project_dir_.empty()) return true;
+    project::Project p = project::Project::make_default();
+    p.tempo_bpm = audio_.transport_control().tempo_bpm.load();
+    if (!p.tracks.empty()) {
+        p.tracks[0].clips.push_back(clip_);
+    }
+    if (journal_open_) {
+        if (!journal_.checkpoint(p)) {
+            error = "journal checkpoint failed";
+            return false;
+        }
+    }
+    if (!journal_.save_atomic(p, project_dir_, error)) return false;
+    log::info("app", "project saved to {}", project_dir_);
     return true;
 }
 
@@ -142,6 +185,28 @@ void PlayEngine::on_device_event(midi::DeviceEvent const& de) {
     }
 }
 
+void PlayEngine::journal_new_events(std::size_t before) {
+    if (!journal_open_) return;
+    // Journal every event the recorder appended (the note pair lands at
+    // note-off time — complete events only; a crash mid-note loses that
+    // note, which never completed anyway).
+    for (std::size_t i = before; i < clip_.events.size(); ++i) {
+        auto const& e = clip_.events[i];
+        nlohmann::json const j = {{"tick", e.tick},
+                                  {"channel", e.channel},
+                                  {"note", e.note},
+                                  {"velocity", e.velocity},
+                                  {"on", e.on},
+                                  {"take", e.take}};
+        project::JournalEntry entry;
+        entry.op = project::JournalOp::ClipRecord;
+        entry.i = 0;  // track 0 (M3 single-track recording)
+        entry.f = 0;  // clip 0
+        entry.s = j.dump();
+        journal_.append(entry);
+    }
+}
+
 std::vector<mapping::Command> PlayEngine::drain_app_events() {
     // App/Qt thread: mapping + recorder + recording gate.
     std::vector<mapping::Command> all;
@@ -162,6 +227,16 @@ std::vector<mapping::Command> PlayEngine::drain_app_events() {
                     if (ev.is_note_on()) arp_.note_on(n);
                     else arp_.note_off(n);
                 }
+            }
+            if (recording_ && !ev.is_note_on() && ev.note() >= 36 &&
+                ev.note() <= 51) {
+                std::size_t const before = clip_.events.size();
+                recorder_.note_off(
+                    static_cast<std::int64_t>(now_ticks(
+                        audio_.transport_position(), ctrl.tempo_bpm.load(),
+                        48000.0)),
+                    ev.channel, ev.note());
+                journal_new_events(before);
             }
             if (recording_ && ev.is_note_on() && ev.note() >= 36 &&
                 ev.note() <= 51) {
@@ -251,10 +326,17 @@ void PlayEngine::command(mapping::Command const& c) {
         ctrl.state_req.store(music::TransportControl::kReqPlay);
         ctrl.metronome_on.store(true, std::memory_order_relaxed);
         break;
-    case A::TransportStop:
+    case A::TransportStop: {
         ctrl.state_req.store(music::TransportControl::kReqStop);
+        std::size_t const before = clip_.events.size();
         recorder_.flush_pending();
+        journal_new_events(before);
+        std::string err;
+        if (!save_project(err)) {
+            log::error("app", "project save failed: {}", err);
+        }
         break;
+    }
     case A::TransportRecord:
         ctrl.state_req.store(music::TransportControl::kReqToggleRecord);
         recording_ = !recording_;
