@@ -100,7 +100,10 @@ ProbeResult Probe::run(int capture_seconds) {
         client.set_sink(&sink);
         client.start();
         auto const& port = result.manifest.ports.front();
-        if (client.connect_output(result.manifest.alsa_client, port.id)) {
+        // The reply comes BACK on the device's output port: we must
+        // subscribe it to our input, not only point our output at it.
+        if (client.connect_input(result.manifest.alsa_client, port.id) &&
+            client.connect_output(result.manifest.alsa_client, port.id)) {
             client.send_sysex(kIdentityRequest, sizeof(kIdentityRequest));
         }
 

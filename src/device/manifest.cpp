@@ -138,6 +138,7 @@ std::vector<Control> default_inventory(std::string const& model) {
                             "Key " + std::to_string(36 + i), 36 + i, -1, 0});
     }
     // 16 pads: bank A notes 36..43 (MPC layout), bank B 44..51.
+    // Channel 9 (MIDI ch 10) — confirmed live on MPK mini 3 (note 38 hit).
     static char const* const bank_row[4] = {"1", "2", "3", "4"};
     for (int bank = 0; bank < 2; ++bank) {
         for (int i = 0; i < 8; ++i) {
@@ -148,7 +149,7 @@ std::vector<Control> default_inventory(std::string const& model) {
                     std::to_string(i % 4 + 1),
                 std::string(bank == 0 ? "Pad A" : "Pad B") +
                     std::to_string(i + 1),
-                36 + (i % 4) * 4 + (i / 4) + bank * 8, -1, 0});
+                36 + (i % 4) * 4 + (i / 4) + bank * 8, -1, 9});
         }
     }
     // 8 knobs: default CCs on channel 0 (probe verifies pot vs encoder).

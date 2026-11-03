@@ -4,22 +4,26 @@ Status: **living document** — updated whenever `addu94 probe --capture`
 produces new evidence. Facts must be backed by captures under
 `~/.local/share/addu94/devices/captures/` (kept per-model); no folklore.
 
-## What we can confirm today (2026-11-03, no hardware attached in dev env)
+## What we can confirm today (2026-11-03 — live MPK mini 3, USB full speed)
 
-- The MPK Mini series is USB class-compliant; on Linux it appears as an ALSA
-  sequencer client (e.g. client name "MPK mini 3") with a duplex port.
-- Units respond to the standard **MIDI Identity Request**
-  `F0 7E 7F 06 01 F7` on mk2/mk3 (mk1 historically does not); the reply
-  `F0 7E <dev> 06 02 <mfg> <family:2> <model:2> <version:4> F7` gives
-  family/model/version. Our probe records the full reply in the manifest's
-  `firmware` field when observed. If a unit does not answer, the manifest
-  marks `identity_request_supported=false` and the model guess comes from
-  the ALSA client name alone.
-- Community RE resources (documented for the M4 preset work, to be verified
-  per-unit with capture): mk2/mk3 preset dumps use an Akai SysEx header of
-  the form `F0 47 <device id> 7A <length> <payload> ... F7` (manufacturer
-  0x47 = "inMusic/Akai"). The exact per-preset byte layout varies by model
-  and firmware — **do not hardcode until a capture proves it.**
+- **Identity Reply confirmed** (probe + capture):
+  `F0 7E 7F 06 02 47 49 00 19 00 01 01 08 00*5 41 31 32 31 30 32 32 34 38 37 32 34 35 31 39 00 F7`
+  → manufacturer `0x47` (inMusic/Akai), family `0x4900`, model `0x1900`,
+  version `1.1.8`, ASCII payload = device serial (`A12102248724519`).
+  Note: the reply only arrives when the device's output port is subscribed
+  to our input — `addu94 probe` now does both directions.
+- **Pads confirmed**: MK3 pads send Note On/Off on **channel 9** (MIDI ch 10)
+  — bank A pad 3 = note 38, full-strike velocity 127. Inventory updated.
+- **Knobs observed**: CC#2 stream while untouched (repeating values ~16-34,
+  ~every 5 s) — knob 3 pot appears noisy/uncentered or auto-reporting.
+  CC#5, CC#6 seen under user turn. Default-program knob CC map is NOT
+  70-77 as assumed from other MPK models — full per-knob mapping deferred
+  to the M4 onboarding calibration (turn each knob, record the CC).
+- Announce-port control events (client/port start-change) arrive as
+  SND_SEQ_EVENT types outside the note/CC space — decoded to `Other`
+  intentionally (they are system events, not device data).
+
+## Community RE resources (to verify with capture, not yet confirmed)
 
 ## Capture methodology
 
