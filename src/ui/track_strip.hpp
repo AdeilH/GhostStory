@@ -1,9 +1,12 @@
 // addu94 — src/ui/track_strip.hpp
 //
 // TrackStrips: the left rail of the "one screen = the instrument" layout —
-// four inline track rows, each with a per-track hue chip + name, mute (M)
-// and arm (rec dot) toggles, a thin custom-painted volume bar (0..150%)
-// with a draggable handle, and a mini pan indicator (draggable, -100..100).
+// four inline track cards in the shared glass language. Each card carries
+// a per-track hue chip + the engine track name, a role tag (SYNTH A /
+// DRUM KIT / BASS — where keys/pads land), mute (M) and arm (rec dot)
+// toggles, a recessed volume lane (0..150%) with a draggable handle, and a
+// mini pan lane (draggable, -100..100). The selected card is framed in the
+// accent with a track-hue edge glow.
 //
 // Clicking a row selects the track (engine.command TrackSelect) and
 // highlights it. Volume/pan/mute/arm changes are reported through the

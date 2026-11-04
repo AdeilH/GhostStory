@@ -4,20 +4,20 @@
 //
 // RT contract: no allocation, no locks, no logging, no exceptions on any
 // public entry point. All state lives in the pre-allocated voice pool plus
-// the file-local `g_ext` side table below.
+// the per-instance `ext_` extension table (see synth.hpp).
 //
-// Why a side table? `Voice` (fixed by the header) carries two SVF state
-// floats and one phase pair. Three things need more room:
+// Why an extension table? `Voice` (fixed by the header) carries two SVF
+// state floats and one phase pair. Three things need more room:
 //   1. unison copies 1..2 of both oscillators (2 extra phase pairs),
 //   2. true LP24 = two cascaded SVF sections (2 extra state floats),
 //   3. stereo: the unison copies are panned BEFORE the filter, so the left
 //      and right signals are different linear combinations and must be
 //      filtered with independent state (2 extra state floats).
-// `g_ext` is a fixed-size, zero-initialized array indexed by voice index —
-// it is never resized, so it is RT-safe. Limitation: it is process-global,
-// so running TWO Synth instances concurrently on the same voice indices
-// would clobber each other's unison/filter state. The engine owns exactly
-// one Synth; documented as an accepted deviation.
+// `ext_` is a fixed-size, zero-initialized array indexed by voice index —
+// it is never resized, so it is RT-safe. It used to be a process-global
+// (g_ext), which made running two Synth instances concurrently clobber each
+// other's unison/filter state; the 4-track play engine needs three, so the
+// table is now a Synth member (same layout, same cost, per-instance).
 //
 // SVF formulation (Chamberlin state-variable, per sample, per channel):
 //     hp = x - lp1 - d*bp1
@@ -50,17 +50,8 @@ constexpr float kMasterGain = 0.5f;     // headroom for polyphony
 //       or zero release drops the envelope below the silence threshold.
 constexpr int kStageFade = 4;
 
-// Per-voice state that does not fit into the fixed Voice struct.
-struct VoiceExt {
-    double phase1b[2]{0.0, 0.0};  // unison copies 1,2 — osc1
-    double phase2b[2]{0.0, 0.0};  // unison copies 1,2 — osc2
-    float lp1r{0.f};              // right-channel SVF section 1, low state
-    float bp1r{0.f};              // right-channel SVF section 1, band state
-    float lp2[2]{0.f, 0.f};       // LP24 section 2, low state  [L, R]
-    float bp2[2]{0.f, 0.f};       // LP24 section 2, band state  [L, R]
-};
-
-VoiceExt g_ext[kMaxVoices];  // indexed by voice index, see note above
+// Per-voice extension state now lives in Synth::ext_ (see synth.hpp) — it
+// must be per-instance because multiple Synths render concurrently.
 
 inline float clampf(float x, float lo, float hi) noexcept {
     return x < lo ? lo : (x > hi ? hi : x);
@@ -137,9 +128,8 @@ inline float svf_run(float x, float& lp, float& bp, float& lp24, float& bp24,
 
 Synth::Synth() noexcept {
     voices_ = {};
-    for (auto& e : g_ext) {
-        e = VoiceExt{};
-    }
+    // ext_ is default-zeroed by its member initializer (fixed-size arrays of
+    // trivial structs); nothing to do for the RT contract here.
 }
 
 void Synth::set_sample_rate(double sr) noexcept {
@@ -199,7 +189,7 @@ void Synth::note_on(int channel, int note, float velocity) noexcept {
     }
 
     Voice& v = voices_[static_cast<std::size_t>(idx)];
-    VoiceExt& e = g_ext[static_cast<std::size_t>(idx)];
+    VoiceExt& e = ext_[static_cast<std::size_t>(idx)];
 
     // Retrigger a sounding (e.g. still-releasing) voice from its current
     // envelope level instead of 0 — avoids a click on steal.
@@ -245,7 +235,7 @@ void Synth::all_sound_off() noexcept {
     for (auto& v : voices_) {
         v = Voice{};
     }
-    for (auto& e : g_ext) {
+    for (auto& e : ext_) {
         e = VoiceExt{};
     }
     oldest_hint_ = 0;
@@ -325,7 +315,7 @@ void Synth::render(float* left, float* right, std::uint32_t frames) noexcept {
         if (!v.active) {
             continue;
         }
-        VoiceExt& e = g_ext[vi];
+        VoiceExt& e = ext_[vi];
 
         double const base_hz =
             440.0 * std::pow(2.0, (static_cast<double>(v.note) - 69.0) / 12.0);

@@ -82,9 +82,27 @@ public:
     [[nodiscard]] int active_voices() const noexcept;
 
 private:
+    // Per-voice state that does not fit into the fixed Voice struct (unison
+    // phase copies, right-channel SVF states, LP24 section-2 states). This
+    // USED to be a process-global side table (g_ext) — that was safe only
+    // while exactly one Synth existed. The 4-track play engine runs three
+    // Synths concurrently, and two instances writing the same global voice
+    // slots would clobber each other's filter/unison state, so the table
+    // moved into the object. Still fixed-size and never resized: the RT
+    // contract (no allocation on note_on/render) is unchanged.
+    struct VoiceExt {
+        double phase1b[2]{0.0, 0.0};  // unison copies 1,2 — osc1
+        double phase2b[2]{0.0, 0.0};  // unison copies 1,2 — osc2
+        float lp1r{0.f};              // right-channel SVF section 1, low state
+        float bp1r{0.f};              // right-channel SVF section 1, band state
+        float lp2[2]{0.f, 0.f};       // LP24 section 2, low state  [L, R]
+        float bp2[2]{0.f, 0.f};       // LP24 section 2, band state  [L, R]
+    };
+
     SynthParams p_{};
     double sr_{48000.0};
     std::array<Voice, kMaxVoices> voices_{};
+    std::array<VoiceExt, kMaxVoices> ext_{};
     int oldest_hint_{0};
 };
 

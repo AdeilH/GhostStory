@@ -1,14 +1,17 @@
 // addu94 — src/ui/health_strip.hpp
 //
 // HealthStrip: the right-hand panel of the mirror row (device/health tabs
-// folded into ~220px). Custom-painted: device LED (green/red) + "MPK"
-// label, xrun count (red when > 0), last/max callback µs, backend + rate
-// summary, and a live master level meter — two thin vertical bars driven
-// by PlayEngine::master_level() (peak |sample| per RT buffer), drawn with
-// a green→yellow→red gradient and 30 fps decay in refresh().
+// folded into ~224px). Custom-painted in the shared glass language: device
+// LED (green with a soft ring when connected, red when not) + state,
+// hairline-separated health rows (tiny tracked label left, colored value
+// right — xruns, callback µs, backend, rate), and a live master level
+// meter — two thin vertical bars driven by PlayEngine::master_level()
+// (peak |sample| per RT buffer) in recessed slots with a green→yellow→red
+// gradient and 30 fps decay in refresh().
 //
 // The velocity-curve selector (formerly the Device tab) lives here as a
-// small combo (stored in-widget until M6 wires the synth-side curve).
+// small combo styled to the theme (stored in-widget until M6 wires the
+// synth-side curve).
 //
 // Plain widget (no Q_OBJECT): refresh() is called from MainWindow's timer.
 #pragma once

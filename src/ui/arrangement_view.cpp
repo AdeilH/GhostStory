@@ -16,7 +16,7 @@ namespace addu94::ui {
 namespace {
 
 using theme::kAccent;
-using theme::kPanel;
+using theme::kAccentHot;
 using theme::kBorder;
 using theme::kGrid;
 using theme::kMuted;
@@ -30,12 +30,13 @@ constexpr int kSectionLen = 8;        // intro/verse/chorus every 8 bars
 constexpr double kPlayheadTrail = 24.0;
 
 // Section names/colors cycle every 8 bars (defaults: intro 0, verse 8,
-// chorus 16, then repeat). Colors reuse the desaturated track hues.
+// chorus 16, then repeat). Hues match theme::kTrackHue so section bands,
+// track chips and pattern blocks all speak the same color language.
 struct Section {
     char const* name;
     int hue;
 };
-constexpr Section kSections[3] = {{"INTRO", 210}, {"VERSE", 160}, {"CHORUS", 30}};
+constexpr Section kSections[3] = {{"INTRO", 212}, {"VERSE", 165}, {"CHORUS", 25}};
 
 double position_bars(app::PlayEngine& engine) noexcept {
     // Transport position (samples) → ticks (96 PPQ) → bars. Same math as
@@ -129,22 +130,27 @@ void ArrangementView::paintEvent(QPaintEvent* /*event*/) {
     int const first_bar = first_visible_bar();
     double const bw = bar_width();
 
-    p.fillRect(rect(), kPanel);
+    // Canvas: recessed near-black gradient — the arrangement reads as the
+    // stage floor that the glass panels and glowing blocks float above.
+    QLinearGradient canvas(QPointF(0, 0), QPointF(0, h));
+    canvas.setColorAt(0.0, QColor(0x16, 0x19, 0x1f));
+    canvas.setColorAt(1.0, QColor(0x11, 0x13, 0x18));
+    p.fillRect(rect(), canvas);
 
     auto x_of = [&](double bar) {
         return (bar - static_cast<double>(first_bar)) * bw;
     };
 
-    // --- lanes (selected track highlighted) ---
+    // --- lanes (selected track tinted in its own hue, hairline separators) ---
     double const rows_h = h - ruler;
     double const row_h = rows_h / static_cast<double>(kTrackCount);
     int const selected = engine_.selected_track();
     for (int t = 0; t < kTrackCount; ++t) {
         QRectF const row(0, ruler + t * row_h, w, row_h);
         if (t == selected) {
-            p.fillRect(row, with_alpha(kAccent, 0.05));
+            p.fillRect(row, with_alpha(theme::track_color(t), 0.07));
         }
-        p.setPen(QPen(kGrid, 1.0));
+        p.setPen(QPen(with_alpha(kGrid, 0.8), 1.0));
         p.drawLine(QPointF(0, row.bottom()), QPointF(w, row.bottom()));
     }
 
@@ -152,9 +158,13 @@ void ArrangementView::paintEvent(QPaintEvent* /*event*/) {
     auto const& ctrl = engine_.audio().transport_control();
     std::uint64_t const loop_bars = ctrl.loop_bars.load(std::memory_order_relaxed);
     if (loop_bars > 0) {
-        p.fillRect(QRectF(x_of(0), ruler,
-                          static_cast<double>(loop_bars) * bw, rows_h),
-                   with_alpha(kAccent, 0.07));
+        double const lx = x_of(0);
+        double const lw = static_cast<double>(loop_bars) * bw;
+        p.fillRect(QRectF(lx, ruler, lw, rows_h), with_alpha(kAccent, 0.06));
+        // Bracket the loop region with two quiet accent posts.
+        p.setPen(QPen(with_alpha(kAccent, 0.35), 1.0));
+        p.drawLine(QPointF(lx + 0.5, ruler), QPointF(lx + 0.5, h));
+        p.drawLine(QPointF(lx + lw - 0.5, ruler), QPointF(lx + lw - 0.5, h));
     }
 
     // --- bar grid + numbers (numbers sit under the section strip) ---
@@ -163,10 +173,12 @@ void ArrangementView::paintEvent(QPaintEvent* /*event*/) {
     for (int b = first_bar; b <= first_bar + kVisibleBars; ++b) {
         double const x = x_of(static_cast<double>(b));
         bool const major = b % 4 == 0;
-        p.setPen(QPen(major ? kBorder : kGrid, 1.0));
+        p.setPen(QPen(major ? with_alpha(kBorder, 0.9)
+                            : with_alpha(kGrid, 0.6),
+                      1.0));
         p.drawLine(QPointF(x, ruler), QPointF(x, h));
         if (b % 2 == 0) {  // number every 2 bars keeps the ruler calm
-            p.setPen(major ? kText : kMuted);
+            p.setPen(major ? with_alpha(kText, 0.85) : with_alpha(kMuted, 0.8));
             p.setFont(bar_font);
             p.drawText(QRectF(x + 4, kSectionStrip, bw, ruler - kSectionStrip),
                        Qt::AlignLeft | Qt::AlignVCenter,
@@ -179,11 +191,11 @@ void ArrangementView::paintEvent(QPaintEvent* /*event*/) {
     for (int s = first_bar / kSectionLen;
          s <= (first_bar + kVisibleBars) / kSectionLen; ++s) {
         Section const& sec = kSections[s % 3];
-        QColor const color = QColor::fromHsl(sec.hue, 153, 160);
+        QColor const color = QColor::fromHsl(sec.hue, 158, 150);
         double const x = x_of(static_cast<double>(s * kSectionLen));
         p.fillRect(QRectF(x, 0, kSectionLen * bw, kSectionStrip),
-                   with_alpha(color, 0.55));
-        p.setPen(with_alpha(kText, 0.9));
+                   with_alpha(color, 0.42));
+        p.setPen(with_alpha(kText, 0.75));
         p.setFont(section_font);
         p.drawText(QRectF(x + 4, 0, kSectionLen * bw - 8, kSectionStrip),
                    Qt::AlignLeft | Qt::AlignVCenter, QString(sec.name));
@@ -191,7 +203,7 @@ void ArrangementView::paintEvent(QPaintEvent* /*event*/) {
     p.setPen(QPen(kBorder, 1.0));
     p.drawLine(QPointF(0, ruler), QPointF(w, ruler));
 
-    // --- pattern blocks ---
+    // --- pattern blocks: gradient body, hairline top highlight, soft shadow ---
     for (Block const& b : blocks_) {
         if (b.track < 0 || b.track >= kTrackCount) continue;
         QRectF const r = block_rect(b);
@@ -200,11 +212,16 @@ void ArrangementView::paintEvent(QPaintEvent* /*event*/) {
 
         theme::draw_shadow(p, r, 6.0);
         QLinearGradient grad(r.topLeft(), r.bottomLeft());
-        grad.setColorAt(0.0, hue.lighter(125));
-        grad.setColorAt(1.0, hue.darker(140));
+        grad.setColorAt(0.0, hue.lighter(130));
+        grad.setColorAt(0.5, hue);
+        grad.setColorAt(1.0, hue.darker(150));
         p.setPen(QPen(hue.lighter(150), 1.0));
         p.setBrush(grad);
         p.drawRoundedRect(r, 6.0, 6.0);
+        // Top-edge highlight: light catching the top of the block.
+        p.setPen(QPen(QColor(255, 255, 255, 34), 1.0));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r.adjusted(1.5, 1.5, -1.5, -1.5), 5.0, 5.0);
 
         p.setPen(with_alpha(QColor(0, 0, 0), 0.75));
         p.setFont(QFont{font().family(), 10, QFont::DemiBold});
@@ -232,7 +249,7 @@ void ArrangementView::paintEvent(QPaintEvent* /*event*/) {
         }
     }
 
-    // --- playhead: soft 24px trail + 2px accent line ---
+    // --- playhead: soft 24px trail, 2px accent line, glowing head ---
     {
         double const x = x_of(playhead_bars_);
         if (x >= -kPlayheadTrail && x <= w) {
@@ -243,6 +260,13 @@ void ArrangementView::paintEvent(QPaintEvent* /*event*/) {
             p.fillRect(trail, tg);
             p.setPen(QPen(kAccent, 2.0));
             p.drawLine(QPointF(x, 0), QPointF(x, h));
+            // Head: a hot dot with one soft halo at the ruler, so the eye
+            // catches the beat position instantly.
+            p.setPen(Qt::NoPen);
+            p.setBrush(with_alpha(kAccentHot, 0.30));
+            p.drawEllipse(QPointF(x, ruler / 2.0), 6.0, 6.0);
+            p.setBrush(kAccentHot);
+            p.drawEllipse(QPointF(x, ruler / 2.0), 3.0, 3.0);
         }
     }
 

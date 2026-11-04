@@ -674,4 +674,129 @@ TEST(drum_kit, init_rejects_bad_rate) {
     CHECK(!err.empty());
 }
 
+// ------------------------------------------------------------- Pad packs
+// Regression for "can't work out how to use different packs with the
+// pads" — there WAS no pack concept; now eight built-ins ship in the box.
+
+TEST(drum_kit, pack_count_and_names) {
+    CHECK_EQ(DrumKit::pack_count(), 8);
+    CHECK_EQ(std::string(DrumKit::pack_name(0)), "MPC Classic");
+    CHECK_EQ(std::string(DrumKit::pack_name(1)), "808");
+    CHECK_EQ(std::string(DrumKit::pack_name(2)), "Lo-Fi");
+    CHECK_EQ(std::string(DrumKit::pack_name(3)), "Techno");
+    CHECK_EQ(std::string(DrumKit::pack_name(4)), "Boom Bap");
+    CHECK_EQ(std::string(DrumKit::pack_name(5)), "Jungle");
+    CHECK_EQ(std::string(DrumKit::pack_name(6)), "Trap");
+    CHECK_EQ(std::string(DrumKit::pack_name(7)), "House");
+    // Out-of-range queries are honest nullptrs; the valid names are all
+    // distinct so a UI list can never show two identical entries.
+    CHECK(DrumKit::pack_name(-1) == nullptr);
+    CHECK(DrumKit::pack_name(8) == nullptr);
+    for (int i = 0; i < DrumKit::pack_count(); ++i) {
+        for (int j = i + 1; j < DrumKit::pack_count(); ++j) {
+            CHECK(std::string_view(DrumKit::pack_name(i)) !=
+                  std::string_view(DrumKit::pack_name(j)));
+        }
+    }
+}
+
+TEST(drum_kit, load_pack_switches_without_error) {
+    DrumKit dk;
+    std::string err;
+    CHECK(dk.init(kSr, err));
+    CHECK(dk.load_pack(1, err));
+    CHECK(err.empty());
+    CHECK_EQ(dk.current_pack(), 1);
+    CHECK(dk.load_pack(3, err));
+    CHECK_EQ(dk.current_pack(), 3);
+    CHECK(dk.load_pack(0, err));
+    CHECK_EQ(dk.current_pack(), 0);
+    // Out-of-range indices are rejected with an error, pack unchanged.
+    CHECK(!dk.load_pack(-1, err));
+    CHECK(!err.empty());
+    CHECK_EQ(dk.current_pack(), 0);
+    CHECK(!dk.load_pack(DrumKit::pack_count(), err));
+    CHECK(!err.empty());
+    // After all the switching, pads still sound.
+    dk.note_on(addu94::audio::kPadBaseNote, 1.0f);
+    Rendered r = render_for(dk, 0.4);
+    CHECK(r.peak > 0.05f);
+}
+
+TEST(drum_kit, every_pack_every_pad_is_audible) {
+    DrumKit dk;
+    std::string err;
+    CHECK(dk.init(kSr, err));
+    for (int p = 0; p < DrumKit::pack_count(); ++p) {
+        CHECK(dk.load_pack(p, err));
+        for (int i = 0; i < 8; ++i) {
+            dk.note_on(addu94::audio::kPadBaseNote + i, 0.9f);
+            Rendered r = render_for(dk, 0.35);
+            CHECK(r.peak > 0.02f);
+            dk.sampler().all_sound_off();
+        }
+    }
+}
+
+TEST(drum_kit, packs_render_distinct_kits) {
+    // Same pad, same velocity, different packs: the 808 kick (decay tau
+    // 0.60 s, 1.2 s long) must be measurably different from the MPC
+    // Classic kick (tau 0.14 s, 0.45 s) — packs are parameter tables, not
+    // renamed copies.
+    DrumKit a;  // pack 0 (default)
+    DrumKit b;
+    std::string err;
+    CHECK(a.init(kSr, err));
+    CHECK(b.init(kSr, err));
+    CHECK(b.load_pack(1, err));
+    a.note_on(addu94::audio::kPadBaseNote, 1.0f);
+    b.note_on(addu94::audio::kPadBaseNote, 1.0f);
+    Rendered ra = render_for(a, 1.4);
+    Rendered rb = render_for(b, 1.4);
+    CHECK(ra.peak > 0.05f);
+    CHECK(rb.peak > 0.05f);
+    CHECK(std::abs(energy(ra) - energy(rb)) > 0.01);
+    // Determinism still holds per pack (two 808 inits are bit-identical).
+    DrumKit c;
+    CHECK(c.init(kSr, err));
+    CHECK(c.load_pack(1, err));
+    c.note_on(addu94::audio::kPadBaseNote, 1.0f);
+    Rendered rc = render_for(c, 1.4);
+    CHECK_EQ(rc.left.size(), rb.left.size());
+    for (std::size_t i = 0; i < rc.left.size(); ++i) {
+        if (!bit_equal(rc.left[i], rb.left[i])) {
+            CHECK(!"808 pack renders differ between identical runs");
+            break;
+        }
+    }
+}
+
+TEST(drum_kit, every_pack_pair_renders_distinct) {
+    // The 0-vs-1 comparison above pins the original pair; this loop
+    // generalizes it: EVERY pack pair must differ on the kick — adding a
+    // new pack to kPackSpecs without actually changing the sound fails
+    // here. Relative (>2%) rather than absolute: energies scale with the
+    // level/decay of each recipe and an absolute floor would be brittle.
+    for (int i = 0; i < DrumKit::pack_count(); ++i) {
+        for (int j = i + 1; j < DrumKit::pack_count(); ++j) {
+            DrumKit a;
+            DrumKit b;
+            std::string err;
+            CHECK(a.init(kSr, err));
+            CHECK(b.init(kSr, err));
+            CHECK(a.load_pack(i, err));
+            CHECK(b.load_pack(j, err));
+            a.note_on(addu94::audio::kPadBaseNote, 1.0f);
+            b.note_on(addu94::audio::kPadBaseNote, 1.0f);
+            Rendered ra = render_for(a, 1.4);
+            Rendered rb = render_for(b, 1.4);
+            double const ea = energy(ra);
+            double const eb = energy(rb);
+            double const bigger = ea > eb ? ea : eb;
+            CHECK(bigger > 0.0);  // sanity: a kick actually rendered
+            CHECK(std::abs(ea - eb) / bigger > 0.02);
+        }
+    }
+}
+
 TEST_MAIN()

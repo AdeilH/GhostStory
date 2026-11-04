@@ -12,8 +12,12 @@ namespace addu94::mapping {
 // for user readability; internals are 0-based.
 std::string const& default_profile_toml() {
     static std::string const kDefault = R"(# addu94 default profile — all bindings remappable per project.
-# knob.N.cc: CC number of hardware knob N (verified live on MPK mini 3:
-# the stock program does NOT use CC70-77; calibrate with `addu94 probe`).
+# knob.N.cc: CC number of hardware knob N. The defaults below are knob
+# positions 1..8 of the FIRST stock MPK knob set (CC 1..8). The mapping
+# engine ALSO recognizes the other stock sets by position: CC 21..28 and
+# CC 70..77 (mk2/mk3 factory programs ship these). A `knobs.N.cc` entry
+# here OVERRIDES the alias sets for that knob — run `addu94 calibrate` to
+# generate one from your actual hardware.
 
 [knobs]
 1.cc = 1    # track volume
@@ -96,12 +100,30 @@ std::vector<Command> MappingEngine::consume(midi::MidiEvent const& ev) {
     return out;
 }
 
+int MappingEngine::knob_alias_index(std::uint8_t cc) noexcept {
+    // The three stock MPK knob CC sets, matched by position-in-set. Kept as
+    // explicit ranges (not a table scan) so the intent reads at a glance.
+    if (cc >= 1 && cc <= 8) return cc - 1;
+    if (cc >= 21 && cc <= 28) return cc - 21;
+    if (cc >= 70 && cc <= 77) return cc - 70;
+    return -1;
+}
+
 std::vector<Command> MappingEngine::map_cc(std::uint8_t cc, std::uint8_t val) {
     std::vector<Command> out;
-    // Find knob index by CC.
+    // Find knob index by CC: an explicit profile entry wins, then the stock
+    // alias sets (profile override wins per the contract — a calibrated
+    // knob keeps its CC even if it collides with an alias position).
+    int idx = -1;
     for (int i = 0; i < 8; ++i) {
-        if (knob_cc_[static_cast<std::size_t>(i)] != cc) continue;
-        knob_values_[static_cast<std::size_t>(i)] = val;
+        if (knob_cc_[static_cast<std::size_t>(i)] == cc) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx < 0) idx = knob_alias_index(cc);
+    if (idx >= 0) {
+        knob_values_[static_cast<std::size_t>(idx)] = val;
         Command c;
         c.param = val;
         if (mode_ == Mode::Play) {
@@ -109,19 +131,31 @@ std::vector<Command> MappingEngine::map_cc(std::uint8_t cc, std::uint8_t val) {
                 Action::TrackVolume,  Action::TrackPan,    Action::TrackSend,
                 Action::InstrumentMacro1, Action::FilterCutoff,
                 Action::FilterReso,   Action::EnvAttack,   Action::EnvRelease};
-            c.action = play_actions[i];
+            c.action = play_actions[idx];
         } else if (mode_ == Mode::Edit) {
             static Action const edit_actions[8] = {
                 Action::ScrubCoarse, Action::ScrubFine, Action::TempoNudge,
                 Action::LoopBarsSet, Action::QuantizeGridSet,
                 Action::MasterVolume, Action::ClickLevel, Action::None};
-            c.action = edit_actions[i];
+            c.action = edit_actions[idx];
         } else {  // Step
             // Knob 1 = selected step velocity; others no-op in M3.
-            c.action = i == 0 ? Action::None : Action::None;
+            c.action = idx == 0 ? Action::None : Action::None;
         }
         out.push_back(c);
-        break;
+        return out;
+    }
+    // Unmapped CC (user report: "the knobs are doing nothing at all" — the
+    // user deserves to learn WHY, once per CC number per process so a
+    // sweeping knob spams at most one line). Sustain (64) and channel-mode
+    // messages (>= 120, already filtered in consume()) are never knobs.
+    static bool logged[128] = {};
+    if (cc != 64 && !logged[cc]) {
+        logged[cc] = true;
+        log::info("mapping",
+                  "unmapped CC {}={} — run `addu94 calibrate` or add "
+                  "knobs.N.cc to profile.toml",
+                  cc, val);
     }
     return out;
 }

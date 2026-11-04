@@ -16,22 +16,22 @@ namespace addu94::ui {
 
 namespace {
 
-// Dark theme (spec §9) — keep in sync with ui/theme.hpp (custom-painted
-// widgets hardcode the same values there).
+// Dark theme — derived from ui/theme.hpp so the few real Qt widgets
+// (combo popups, dialogs, tooltips) match the hand-painted glass panels.
 void apply_dark_palette(QApplication& app) {
     QPalette pal;
-    pal.setColor(QPalette::Window, theme::kBaseBg);
+    pal.setColor(QPalette::Window, theme::kBaseTop);
     pal.setColor(QPalette::WindowText, theme::kText);
-    pal.setColor(QPalette::Base, theme::kPanel);
-    pal.setColor(QPalette::AlternateBase, theme::kBaseBg);
+    pal.setColor(QPalette::Base, theme::kPanelTop);
+    pal.setColor(QPalette::AlternateBase, theme::kBaseBottom);
     pal.setColor(QPalette::Text, theme::kText);
     pal.setColor(QPalette::PlaceholderText, theme::kMuted);
-    pal.setColor(QPalette::Button, theme::kPanel);
+    pal.setColor(QPalette::Button, theme::kPanelTop);
     pal.setColor(QPalette::ButtonText, theme::kText);
     pal.setColor(QPalette::BrightText, theme::kRecord);
     pal.setColor(QPalette::Highlight, theme::kAccent);
-    pal.setColor(QPalette::HighlightedText, theme::kBaseBg);
-    pal.setColor(QPalette::ToolTipBase, theme::kPanel);
+    pal.setColor(QPalette::HighlightedText, theme::kBaseTop);
+    pal.setColor(QPalette::ToolTipBase, theme::kPanelTop);
     pal.setColor(QPalette::ToolTipText, theme::kText);
     pal.setColor(QPalette::Disabled, QPalette::WindowText, theme::kMuted);
     pal.setColor(QPalette::Disabled, QPalette::Text, theme::kMuted);

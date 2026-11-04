@@ -2,6 +2,58 @@
 
 All notable changes. Format: Keep-a-Changelog-ish; dates UTC.
 
+## [Unreleased]
+
+### Added
+
+- **Four more pad packs** (Boom Bap, Jungle, Trap, House — 8 built-ins
+  total): same 8 DSP recipes, new parameter tables; a new test asserts
+  every pack pair renders measurably distinct kicks, so a future pack can
+  never ship as a renamed copy.
+
+### Fixed — user reports: "knobs do nothing", "keys stick on one output",
+"can't work out how to use different packs with the pads"
+
+- **Knobs**: the mapping engine now recognizes ALL three stock MPK knob CC
+  layouts by position — CC 1–8, CC 21–28 and CC 70–77 (it only knew 1–8).
+  `knobs.N.cc` profile entries still override. Unmapped CCs log one line
+  per CC number per process pointing at `addu94 calibrate` /
+  `profile.toml`.
+- **Knobs do things now**: PlayEngine implements every knob action —
+  TrackVolume/TrackPan as per-track render gain (equal-power pan),
+  FilterCutoff/FilterReso/EnvAttack/EnvRelease/InstrumentMacro1 pushed to
+  the selected track's synth through an RT-safe parameter queue,
+  MasterVolume (0..1.5), ClickLevel (metronome gain), QuantizeGridSet
+  (off / 1/8 / 1/16 / 1/32 zones — Grid gained ThirtySecond). Honest
+  limitations, documented: TrackSend is stored for the FX-send milestone
+  (fx.hpp has no send bus yet), ScrubCoarse/Fine are stored until
+  Transport gains a position-set control.
+- **Profile loading**: `profile.toml` (from `addu94 calibrate`) is now
+  actually loaded — project dir first, then `$XDG_CONFIG_HOME/addu94/`,
+  then `~/.config/addu94/`; the resolved knob CC map is logged at startup.
+- **Keyboard routing**: 4 tracks, each its own sound — Keys A (default
+  patch), Keys B (square lead), Drums (keyboard notes map to pads mod-8,
+  any octave), Bass (−12, mono-ish sub). The keys always play the SELECTED
+  track (arp + chord slots follow). New API: `track_count()`,
+  `track_name()`, `track_role()`, `selected_track()`, `select_track()`,
+  `track_volume()`, `track_pan()`, `track_send()`, `TrackRole`.
+- **Pad packs**: DrumKit now ships 4 built-in packs — "MPC Classic"
+  (previous recipes, bit-identical), "808", "Lo-Fi", "Techno" — the same
+  DSP with different parameter tables, all synthesized at init. Pack
+  switching is a single atomic index (race-free against the audio
+  callback; zone-table mutation while rendering was not). New API:
+  `pack_count()`, `pack_name()`, `load_pack()`, `current_pack()`,
+  `PlayEngine::pad_packs()/set_pad_pack()/cycle_pad_pack()`.
+- **Synth**: the per-voice extension state moved from a process global
+  into the Synth instance — running 3 synths concurrently (the new track
+  model) would otherwise clobber unison/filter state across tracks.
+- **VoiceCmd queue** is now MPMC: live keys (MIDI thread) and arp/chord
+  strikes (app thread) are genuinely two producers — the old SPSC could
+  corrupt under that overlap.
+- New tests: knob alias sets / override / unmapped-CC (test_mapping),
+  pack names / switching / per-pack audibility / determinism
+  (test_sampler). 20/20 suites green.
+
 ## [0.1.3] — 2026-11-04
 
 ### Fixed — pad semantics (user report: "pad 1 and pad 2 have same response")

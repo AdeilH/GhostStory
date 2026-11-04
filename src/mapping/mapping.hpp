@@ -50,10 +50,25 @@ public:
         return idx >= 0 && idx < 8 ? knob_values_[static_cast<std::size_t>(idx)] : 0;
     }
 
+    /// Resolved CC number for knob `idx` (0-based): the profile's
+    /// `knobs.N.cc` when set, else the first stock set position (CC 1..8).
+    /// For UI display (Device view knob table). Out of range -> 0.
+    [[nodiscard]] std::uint8_t knob_cc(int idx) const noexcept {
+        return idx >= 0 && idx < 8 ? knob_cc_[static_cast<std::size_t>(idx)]
+                                   : std::uint8_t{0};
+    }
+
 private:
     void load_default_profile();
     [[nodiscard]] std::vector<Command> map_cc(std::uint8_t cc, std::uint8_t val);
     [[nodiscard]] std::vector<Command> map_note(int note, bool on);
+
+    /// Knob index for a CC that matches no explicit profile entry: stock
+    /// MPK programs ship several fixed knob CC layouts (mk2/mk3 commonly
+    /// 21..28 or 70..77; the old default only knew 1..8 — user report:
+    /// "the knobs are doing nothing at all"). Each set maps knobs 1..8 by
+    /// POSITION in the set. Returns -1 for a CC in none of them.
+    [[nodiscard]] static int knob_alias_index(std::uint8_t cc) noexcept;
 
     Mode mode_{Mode::Play};
     bool pad_bank_b_{false};

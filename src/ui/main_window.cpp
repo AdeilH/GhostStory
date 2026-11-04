@@ -7,6 +7,7 @@
 #include <QCursor>
 #include <QFont>
 #include <QInputDialog>
+#include <QLinearGradient>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPaintEvent>
@@ -28,6 +29,7 @@ namespace addu94::ui {
 namespace {
 
 using theme::kAccent;
+using theme::kAccentHot;
 using theme::kBorder;
 using theme::kMuted;
 using theme::kRecord;
@@ -96,8 +98,9 @@ protected:
         QRectF const full = QRectF(rect());
         theme::draw_panel(p, full);
 
-        QFont const value_font{font().family(), 13, QFont::DemiBold};
-        QFont const label_font{font().family(), 8};
+        // Typography tiers: tiny tracked labels / demi-bold values / hints.
+        QFont const value_font = theme::value_font(font(), 13);
+        QFont const label_font = theme::label_font(font());
         QFont const hint_font{font().family(), 9};
 
         // --- buttons: play / stop / record / metronome ---
@@ -139,36 +142,47 @@ protected:
                               label_font, hover_ == Hover::Loop, "+/- drag");
         loop_rect_ = QRectF{x - 66.0, 8.0, 66.0, full.height() - 16.0};
 
-        // --- click (metronome gain): thin slider ---
+        // --- click (metronome gain): thin slider in an inset well ---
         p.setPen(kMuted);
         p.setFont(label_font);
-        p.drawText(QRectF{x, full.height() / 2.0 - 14.0, 64.0, 11.0},
+        p.drawText(QRectF{x, full.height() / 2.0 - 15.0, 64.0, 11.0},
                    Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral("click"));
-        QRectF const track{x, full.height() / 2.0 + 1.0, 64.0, 4.0};
+        QRectF const track{x, full.height() / 2.0 + 1.0, 64.0, 5.0};
         click_rect_ = track.adjusted(-8.0, -12.0, 8.0, 12.0);
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0x27, 0x2c, 0x35));
-        p.drawRoundedRect(track, 2, 2);
+        theme::draw_well(p, track.adjusted(-3.0, -2.0, 3.0, 2.0), 4.0);
         float const gain =
             engine_.audio().transport_control().metronome_gain.load(
                 std::memory_order_relaxed);
         double const fill = track.width() * std::clamp(static_cast<double>(gain), 0.0, 1.0);
-        p.setBrush(kAccent);
+        QLinearGradient gain_fill{track.topLeft(), track.bottomLeft()};
+        gain_fill.setColorAt(0.0, kAccentHot);
+        gain_fill.setColorAt(1.0, kAccent);
+        p.setPen(Qt::NoPen);
+        p.setBrush(gain_fill);
         p.drawRoundedRect(QRectF{track.left(), track.top(), fill, track.height()},
                           2, 2);
         p.setBrush(kText);
         p.drawEllipse(QPointF{track.left() + fill, track.center().y()}, 5.0, 5.0);
 
-        // --- position readout (right) ---
-        QFont mono{"monospace"};
-        mono.setStyleHint(QFont::TypeWriter);
-        mono.setPointSize(std::max(font().pointSize() + 1, 10));
-        p.setFont(mono);
+        // --- position readout (right, monospace, with a playing pulse dot) ---
+        p.setFont(theme::mono_font(font(), 12));
         p.setPen(kText);
-        p.drawText(QRectF{full.right() - 220.0, 0.0, 206.0,
+        p.drawText(QRectF{full.right() - 228.0, 0.0, 208.0,
                           static_cast<double>(height())},
                    Qt::AlignRight | Qt::AlignVCenter,
                    QString::fromStdString(position_text()));
+        // Accent dot: breathes softly while the transport rolls.
+        if (playing_) {
+            double const glow =
+                0.55 + 0.45 * std::sin(static_cast<double>(now_ms_) / 240.0);
+            p.setPen(Qt::NoPen);
+            p.setBrush(with_alpha(kAccent, 0.20 * glow));
+            p.drawEllipse(QPointF{full.right() - 236.0, full.center().y()},
+                          6.5, 6.5);
+            p.setBrush(with_alpha(kAccent, 0.45 + 0.55 * glow));
+            p.drawEllipse(QPointF{full.right() - 236.0, full.center().y()},
+                          3.0, 3.0);
+        }
     }
 
     void mouseMoveEvent(QMouseEvent* event) override {
@@ -326,8 +340,8 @@ private:
         return std::format("bar {}.beat {}.{:02}", bar, beat, tick96);
     }
 
-    /// One value block (label above, big value below). Returns the x for
-    /// the next block.
+    /// One value block (hairline separator, tiny label above, big value
+    /// below). Returns the x for the next block.
     double paint_value_block(QPainter& p, double x, char const* label,
                              QString const& value, QFont const& value_font,
                              QFont const& label_font, bool hovered,
@@ -336,8 +350,12 @@ private:
         double const h = static_cast<double>(height());
         QRectF const area{x, 0.0, block_w, h};
 
+        // Hairline separator between value blocks (sits in the gap).
+        p.setPen(QPen(with_alpha(kBorder, 0.9), 1.0));
+        p.drawLine(QPointF{x - 5.0, 14.0}, QPointF{x - 5.0, h - 14.0});
+
         if (hovered) {
-            p.setPen(with_alpha(kAccent, 0.25));
+            p.setPen(with_alpha(kAccent, 0.30));
             p.setBrush(with_alpha(kAccent, 0.08));
             p.drawRoundedRect(area.adjusted(1.0, 6.0, -1.0, -6.0), 6, 6);
             p.setPen(kMuted);
@@ -371,18 +389,39 @@ private:
                 std::memory_order_relaxed);
         }
 
-        QColor const fill = active ? with_alpha(accent, 0.22)
-                            : hovered ? QColor(0x26, 0x2b, 0x33)
-                                      : QColor(0x21, 0x25, 0x2c);
+        // Hover lift: the button raises 1px; active state glows outward
+        // (one soft translucent ring behind the body — cheap at 30 Hz).
+        QRectF const body = hovered && !active ? btn.translated(0.0, -1.0) : btn;
+        if (active) {
+            p.setPen(Qt::NoPen);
+            p.setBrush(with_alpha(accent, 0.16));
+            p.drawRoundedRect(body.adjusted(-4.0, -4.0, 4.0, 4.0), 11, 11);
+        }
+
+        QLinearGradient fill{body.topLeft(), body.bottomLeft()};
+        if (active) {
+            fill.setColorAt(0.0, with_alpha(accent, 0.34));
+            fill.setColorAt(1.0, with_alpha(accent, 0.16));
+        } else if (hovered) {
+            fill.setColorAt(0.0, QColor(0x2c, 0x31, 0x3b));
+            fill.setColorAt(1.0, QColor(0x21, 0x25, 0x2c));
+        } else {
+            fill.setColorAt(0.0, QColor(0x24, 0x28, 0x30));
+            fill.setColorAt(1.0, QColor(0x1b, 0x1e, 0x24));
+        }
         p.setPen(QPen(active ? accent : kBorder, 1.2));
         p.setBrush(fill);
-        p.drawRoundedRect(btn, 8, 8);
+        p.drawRoundedRect(body, 8, 8);
+        // Top-edge inner highlight for a slightly domed feel.
+        p.setPen(QPen(QColor(255, 255, 255, 16), 1.0));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(body.adjusted(1.5, 1.5, -1.5, -1.5), 7, 7);
 
         QColor const icon = active ? accent : (hovered ? kText : kMuted);
         p.setPen(Qt::NoPen);
         p.setBrush(icon);
-        double const s = btn.width();
-        QPointF const c = btn.center();
+        double const s = body.width();
+        QPointF const c = body.center();
         if (index == 0) {  // play triangle
             QPolygonF tri;
             tri << QPointF{c.x() - s * 0.14, c.y() - s * 0.20}
@@ -405,16 +444,16 @@ private:
                 p.drawEllipse(c, r + 3.0, r + 3.0);
             }
         } else {  // metronome: trapezoid body + pendulum
-            QPolygonF body;
+            QPolygonF pendulum_body;
             double const half_top = s * 0.09;
             double const half_bot = s * 0.18;
             double const top = c.y() - s * 0.20;
             double const bot = c.y() + s * 0.20;
-            body << QPointF{c.x() - half_top, top}
-                 << QPointF{c.x() + half_top, top}
-                 << QPointF{c.x() + half_bot, bot}
-                 << QPointF{c.x() - half_bot, bot};
-            p.drawPolygon(body);
+            pendulum_body << QPointF{c.x() - half_top, top}
+                          << QPointF{c.x() + half_top, top}
+                          << QPointF{c.x() + half_bot, bot}
+                          << QPointF{c.x() - half_bot, bot};
+            p.drawPolygon(pendulum_body);
             p.setPen(QPen(icon, 1.8, Qt::SolidLine, Qt::RoundCap));
             double const swing =
                 active ? std::sin(static_cast<double>(now_ms_) / 150.0) * s * 0.08
@@ -472,7 +511,11 @@ MainWindow::MainWindow(app::PlayEngine& engine, QWidget* parent)
     : QMainWindow(parent), engine_(engine) {
     setWindowTitle("addu94");
     setMinimumSize(1280, 720);
-    setStyleSheet("QMainWindow { background: #14161a; }");
+    // Deep near-black stage with a faint vertical falloff (matches
+    // theme::kBaseTop → kBaseBottom; panels float on top of this).
+    setStyleSheet(
+        "QMainWindow { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        " stop:0 #0d0f13, stop:1 #15171c); }");
 
     auto* central = new QWidget(this);
     auto* root = new QVBoxLayout(central);

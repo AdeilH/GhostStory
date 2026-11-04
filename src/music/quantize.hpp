@@ -14,11 +14,13 @@ namespace addu94::music {
 
 enum class Grid : std::uint8_t {
     Off = 0,
-    Quarter,     // 96 ticks
-    Eighth,      // 48
-    Sixteenth,   // 24
-    EighthT,     // 32 (triplet eighths: 96 * 2/6)
-    SixteenthT,  // 16
+    Quarter,       // 96 ticks
+    Eighth,        // 48
+    Sixteenth,     // 24
+    EighthT,       // 32 (triplet eighths: 96 * 2/6)
+    SixteenthT,    // 16
+    ThirtySecond,  // 12 — added for the QuantizeGridSet knob (4-zone mapping
+                   // off/1/8/1/16/1/32); integer-exact at 96 PPQ
 };
 
 /// Grid period in ticks at 96 PPQ.
@@ -30,6 +32,7 @@ enum class Grid : std::uint8_t {
     case Grid::Sixteenth: return kPPQ / 4;
     case Grid::EighthT: return kPPQ / 3;      // 32: 3 triplet 8ths per beat
     case Grid::SixteenthT: return kPPQ / 6;   // 16
+    case Grid::ThirtySecond: return kPPQ / 8; // 12
     }
     return 0;
 }
@@ -62,6 +65,7 @@ enum class Grid : std::uint8_t {
     case Grid::Sixteenth: return "1/16";
     case Grid::EighthT: return "1/8T";
     case Grid::SixteenthT: return "1/16T";
+    case Grid::ThirtySecond: return "1/32";
     }
     return "?";
 }
