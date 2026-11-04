@@ -2,43 +2,40 @@
 #include "ui/app_gui.hpp"
 
 #include "ui/main_window.hpp"
+#include "ui/theme.hpp"
 
 #include <QApplication>
-#include <QColor>
 #include <QPalette>
 #include <QStyleFactory>
 #include <QTimer>
+
+#include <cstdlib>
+#include <QString>
 
 namespace addu94::ui {
 
 namespace {
 
-// Dark theme (spec §9). Custom-painted widgets (ControllerMirror,
-// ArrangementView) hardcode the same colors.
-constexpr QColor kWindow{0x1a, 0x1d, 0x21};   // #1a1d21
-constexpr QColor kPanel{0x23, 0x27, 0x2c};    // #23272c
-constexpr QColor kBlue{0x4f, 0x9c, 0xf9};     // #4f9cf9
-constexpr QColor kText{0xcf, 0xd6, 0xdd};     // #cfd6dd
-constexpr QColor kDim{0x6b, 0x74, 0x7e};
-
+// Dark theme (spec §9) — keep in sync with ui/theme.hpp (custom-painted
+// widgets hardcode the same values there).
 void apply_dark_palette(QApplication& app) {
     QPalette pal;
-    pal.setColor(QPalette::Window, kWindow);
-    pal.setColor(QPalette::WindowText, kText);
-    pal.setColor(QPalette::Base, kPanel);
-    pal.setColor(QPalette::AlternateBase, kWindow);
-    pal.setColor(QPalette::Text, kText);
-    pal.setColor(QPalette::PlaceholderText, kDim);
-    pal.setColor(QPalette::Button, kPanel);
-    pal.setColor(QPalette::ButtonText, kText);
-    pal.setColor(QPalette::BrightText, QColor(0xd9, 0x53, 0x4f));
-    pal.setColor(QPalette::Highlight, kBlue);
-    pal.setColor(QPalette::HighlightedText, kWindow);
-    pal.setColor(QPalette::ToolTipBase, kPanel);
-    pal.setColor(QPalette::ToolTipText, kText);
-    pal.setColor(QPalette::Disabled, QPalette::WindowText, kDim);
-    pal.setColor(QPalette::Disabled, QPalette::Text, kDim);
-    pal.setColor(QPalette::Disabled, QPalette::ButtonText, kDim);
+    pal.setColor(QPalette::Window, theme::kBaseBg);
+    pal.setColor(QPalette::WindowText, theme::kText);
+    pal.setColor(QPalette::Base, theme::kPanel);
+    pal.setColor(QPalette::AlternateBase, theme::kBaseBg);
+    pal.setColor(QPalette::Text, theme::kText);
+    pal.setColor(QPalette::PlaceholderText, theme::kMuted);
+    pal.setColor(QPalette::Button, theme::kPanel);
+    pal.setColor(QPalette::ButtonText, theme::kText);
+    pal.setColor(QPalette::BrightText, theme::kRecord);
+    pal.setColor(QPalette::Highlight, theme::kAccent);
+    pal.setColor(QPalette::HighlightedText, theme::kBaseBg);
+    pal.setColor(QPalette::ToolTipBase, theme::kPanel);
+    pal.setColor(QPalette::ToolTipText, theme::kText);
+    pal.setColor(QPalette::Disabled, QPalette::WindowText, theme::kMuted);
+    pal.setColor(QPalette::Disabled, QPalette::Text, theme::kMuted);
+    pal.setColor(QPalette::Disabled, QPalette::ButtonText, theme::kMuted);
     app.setPalette(pal);
 }
 
@@ -60,6 +57,29 @@ int run_gui(app::PlayEngine& engine, int auto_stop_seconds) {
 
     MainWindow window(engine);
     window.show();
+
+    // UI test aid (permanent): A94_SHOT=<path> grabs the window 2 s after
+    // startup and quits. A94_SHOT_PLAY=1 additionally starts the transport
+    // shortly after startup, so screenshots can capture the live state
+    // (playhead, loop shading, level meter). Used for the offscreen
+    // screenshot loop:
+    //   A94_SHOT=/tmp/ui.png QT_QPA_PLATFORM=offscreen ./build/main/addu94 play
+    if (char const* shot = std::getenv("A94_SHOT"); shot != nullptr) {
+        QString const path = QString::fromUtf8(shot);
+        if (std::getenv("A94_SHOT_PLAY") != nullptr) {
+            QTimer::singleShot(300, &app, [&engine] {
+                auto& ctrl = engine.audio().transport_control();
+                ctrl.state_req.store(music::TransportControl::kReqPlay,
+                                     std::memory_order_release);
+                ctrl.metronome_on.store(true, std::memory_order_relaxed);
+                ctrl.loop_bars.store(4, std::memory_order_relaxed);
+            });
+        }
+        QTimer::singleShot(2000, &app, [&app, &window, path] {
+            window.grab().save(path);
+            app.quit();
+        });
+    }
 
     if (auto_stop_seconds > 0) {
         QTimer::singleShot(auto_stop_seconds * 1000, &app, [&app] {

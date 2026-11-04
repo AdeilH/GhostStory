@@ -236,12 +236,11 @@ void Sampler::render(float* left, float* right, std::uint32_t frames) noexcept {
     if (left == nullptr || right == nullptr) {
         return;
     }
-    // Overwrite semantics (same guarantee as Synth): exact zeros when no
-    // voice is active, regardless of caller buffer state.
-    for (std::uint32_t i = 0; i < frames; ++i) {
-        left[i] = 0.f;
-        right[i] = 0.f;
-    }
+    // ACCUMULATE semantics (FIX — was overwrite, which wiped the synth when
+    // mixed after it in PlayEngine): voices ADD into the caller's buffers.
+    // The engine (AudioEngine::render) zeroes buffers before the master
+    // hook; standalone callers/tests must zero first. Silence guarantee:
+    // no active voice + zeroed input = zeroed output.
     if (frames == 0) {
         return;
     }

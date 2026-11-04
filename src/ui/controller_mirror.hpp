@@ -1,9 +1,11 @@
 // addu94 — src/ui/controller_mirror.hpp
 //
-// ControllerMirror (spec §9): custom-painted hardware mirror of the MPK
-// Mini — 8 knobs (arcs + action labels), 16 pads (2 banks of 8, active bank
-// lit, hits decay over 150 ms), and the mode / pad-bank / octave status
-// strip. Mode buttons are clickable (drives mapping().set_mode).
+// ControllerMirror: custom-painted hardware mirror of the MPK Mini, styled
+// to the shared theme (panel bg, rounded corners, accent #5aa2ff). 8 knobs
+// (arcs + action labels), 16 pads (2 banks of 8, active bank lit, hits
+// decay over 150 ms), and the mode strip as a segmented control (three
+// rounded segments, active = accent fill; clickable → mapping().set_mode)
+// plus pad-bank / octave / track status.
 //
 // Plain widget (no Q_OBJECT): repaints are driven by MainWindow's 30 Hz
 // timer via refresh(); hits arrive via pulse_pad() from the same drain.

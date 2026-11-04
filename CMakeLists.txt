@@ -103,9 +103,8 @@ if(ADDU94_UI)
         src/ui/main_window.cpp
         src/ui/controller_mirror.cpp
         src/ui/arrangement_view.cpp
-        src/ui/mixer_view.cpp
-        src/ui/device_view.cpp
-        src/ui/health_view.cpp
+        src/ui/track_strip.cpp
+        src/ui/health_strip.cpp
         src/ui/app_gui.cpp
     )
     target_include_directories(addu94_ui PUBLIC src)

@@ -66,6 +66,13 @@ public:
     // --- commands (app thread) ---
     void command(mapping::Command const& c);
 
+    // --- master output level (UI meter tap) ---
+    // RT writes the peak |sample| of the last rendered buffer (relaxed store);
+    // the UI reads it each tick with its own decay. Plain atomics, no locks.
+    [[nodiscard]] float master_level() const noexcept {
+        return master_level_.load(std::memory_order_relaxed);
+    }
+
     /// Test driver: inject a note through the SAME queue path as hardware
     /// (event_q_ → drain_app_events → recorder/journal). Not used by the
     /// shipped app paths.
@@ -145,6 +152,7 @@ private:
 
     music::Arp arp_;
     std::atomic<bool> arp_on_{false};
+    std::atomic<float> master_level_{0.0f};  // RT: peak |sample| per buffer
     std::atomic<bool> scale_lock_{false};
     music::Scale const* scale_{&music::kScales[0]};  // chromatic default
     std::uint8_t scale_root_{0};

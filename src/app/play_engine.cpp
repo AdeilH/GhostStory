@@ -336,6 +336,14 @@ void PlayEngine::render_into(float* left, float* right,
             right[i] *= vol;
         }
     }
+    // UI meter tap: peak |sample| over the finished buffer (RT-safe plain
+    // loop, relaxed store — the reader is the Qt thread's 30 Hz tick).
+    float peak = 0.0f;
+    for (std::uint32_t i = 0; i < frames; ++i) {
+        peak = std::max(peak, std::abs(left[i]));
+        peak = std::max(peak, std::abs(right[i]));
+    }
+    master_level_.store(peak, std::memory_order_relaxed);
 }
 
 void PlayEngine::command(mapping::Command const& c) {

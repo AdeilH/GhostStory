@@ -49,6 +49,11 @@ Rendered render_for(Source& s, double seconds) {
         // Tail partial chunk: never render past the end of the buffer.
         std::uint32_t const n =
             (frames - off < 512) ? frames - off : 512;
+        // Accumulate semantics: caller zeroes first (engine contract).
+        std::fill(r.left.begin() + static_cast<long>(off),
+                  r.left.begin() + static_cast<long>(off + n), 0.f);
+        std::fill(r.right.begin() + static_cast<long>(off),
+                  r.right.begin() + static_cast<long>(off + n), 0.f);
         s.render(r.left.data() + off, r.right.data() + off, n);
     }
     for (float v : r.left) r.peak = std::max(r.peak, std::abs(v));
@@ -396,7 +401,8 @@ TEST(sampler, all_sound_off_is_exact_zero) {
     Rendered r = render_for(s, 0.1);
     CHECK(r.peak > 0.01f);
     s.all_sound_off();
-    std::vector<float> buf(4800, 1.f);
+    // Accumulate semantics: silent voices add nothing into zeroed buffers.
+    std::vector<float> buf(4800, 0.f);
     s.render(buf.data(), buf.data(), 4800);
     for (float v : buf) CHECK_EQ(v, 0.f);
     CHECK_EQ(s.active_voices(), 0);

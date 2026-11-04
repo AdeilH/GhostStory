@@ -2,6 +2,34 @@
 
 All notable changes. Format: Keep-a-Changelog-ish; dates UTC.
 
+## [0.1.2] — 2026-11-04
+
+### Added — UI modernization ("one screen = the instrument")
+- Single-screen layout replacing the tabbed UI: transport bar (drawn
+  play/stop/rec/metronome icons, shortcut hints), left track rail with
+  inline mute/arm/volume/pan per track, central arrangement canvas
+  (section bands, per-track-hue pattern blocks, drag-to-move with bar
+  snap, double-click to extend, glowing playhead + trail, loop shading),
+  restyled controller mirror with segmented mode control, health strip
+  with device LED, live xrun/callback readouts and an honest master
+  level meter (RT-safe peak tap in PlayEngine).
+- Musician interactions: Space = play/stop, R = record, M = metronome;
+  drag BPM/loop values; tooltips everywhere.
+- Permanent UI test aid: A94_SHOT=<path> grabs an offscreen screenshot
+  (A94_SHOT_PLAY=1 starts transport for live-state captures).
+
+### Fixed
+- **Mix bug** (found via the UI meter debug): Sampler::render overwrote
+  buffers, silently wiping the synth when drums played through PlayEngine
+  — sampler now accumulates into caller-zeroed buffers (engine contract);
+  verified synth+drums mix (kick+snare RMS over sustained synth).
+
+### Verified
+- 30-minute soak (spec §11, full duration): PASS — 0 xruns, 35,609 note
+  events journaled and recovered, fuzz survived.
+- UI verified through 6 offscreen screenshot iterations; 19 test suites;
+  make ci ALL GATES GREEN.
+
 ## [0.1.0] — 2026-11-04
 
 Milestones M0–M8 complete. Highlights across the release:

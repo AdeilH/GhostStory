@@ -39,6 +39,11 @@ Status: ☐ todo · ◐ in progress · ☑ done
 
 - ☑ SFZ parser (practical v1 opcode subset) — DONE post-tag: sfz.hpp/.cpp,
   13 tests, feeds Sampler directly.
+- ☑ UI modernization — DONE post-tag: single-screen instrument layout,
+  drag/hover/keyboard interactions, master meter; screenshot-driven
+  development (6 iterations); fixed the drums-vs-synth mix bug found by
+  the meter debug.
+- ☑ 30-min soak at full spec duration — PASS (0 xruns, 35609 events).
 - ☑ Knob calibration `addu94 calibrate` — DONE post-tag: interactive
   CC mapping -> profile.toml (makes all 8 knobs work on stock presets).
 - ☑ Trace mode `addu94 bench --trace` — DONE post-tag: Chrome-trace JSON
