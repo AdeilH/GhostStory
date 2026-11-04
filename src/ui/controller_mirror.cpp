@@ -238,21 +238,21 @@ void ControllerMirror::paint_status(QPainter& p, QRectF const& area) {
         p.drawText(seg, Qt::AlignCenter, QString(mode_names[i]));
     }
 
-    // Pad bank indicator + octave display.
+    // Pad legend + octave display. Legend uses the small font: the pad
+    // functions must be readable at a glance without colliding with OCT.
     double const info_y = container.bottom() + 8.0;
-    bool const bank_b = engine_.mapping().pad_bank_b();
-    p.setFont(big);
-    p.setPen(bank_b ? kAccent : kGreen);
-    p.drawText(QRectF{area.left(), info_y, area.width() * 0.5, 24},
-               Qt::AlignLeft | Qt::AlignVCenter,
-               QString("PADS %1").arg(bank_b ? QLatin1Char('B') : QLatin1Char('A')));
-
     int const oct = engine_.octave();
     QString const oct_text = QString("OCT %1%2")
                                  .arg(oct >= 0 ? QLatin1Char('+') : QLatin1Char('-'))
                                  .arg(oct < 0 ? -oct : oct);
+    p.setFont(small);
+    p.setPen(kGreen);
+    p.drawText(QRectF{area.left(), info_y, area.width() * 0.68, 24},
+               Qt::AlignLeft | Qt::AlignVCenter,
+               QString("A drums · B1/B2 undo/redo · B3-B8 chords (hold+keys=capture)"));
     p.setPen(kText);
-    p.drawText(QRectF{area.left(), info_y, area.width() * 0.5, 24},
+    p.drawText(QRectF{area.right() - area.width() * 0.30, info_y,
+                      area.width() * 0.30, 24},
                Qt::AlignRight | Qt::AlignVCenter, oct_text);
 
     p.setPen(kMuted);

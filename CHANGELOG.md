@@ -2,6 +2,28 @@
 
 All notable changes. Format: Keep-a-Changelog-ish; dates UTC.
 
+## [0.1.3] — 2026-11-04
+
+### Fixed — pad semantics (user report: "pad 1 and pad 2 have same response")
+- Root cause: A1+A2 was the Undo chord — drumming the two pads in sequence
+  fired Undo (erasing takes!), and the ChordSlot/ClipLaunch actions pads
+  were mapped to were never implemented, so pads had no distinct response.
+- New PLAY-mode pad semantics, all immediate and distinct:
+  - **A1–A8 (notes 36–43): drum pads** — 8 distinct kit sounds, instant.
+  - **B1/B2 (44/45): undo / redo** — instant, dedicated pads.
+  - **B3–B8 (46–51): chord memory slots** — tap plays the stored chord
+    (note-ons on press, note-offs on release); hold ≥400 ms while playing
+    keys captures the current keys into the slot.
+  - EDIT mode: A1–A8 selects tracks (press, was release).
+- No two-pad chords anywhere: drumming can never erase a take.
+- Mirror legend line ("A drums · B1/B2 undo/redo · B3-B8 chords
+  (hold+keys=capture)") so the functions are discoverable on-screen; each
+  pad pulses its own action in the mirror.
+- Coverage audit updated (all controls still bound — zero dead controls).
+- New test suite test_mapping.cpp (7 tests) incl. the exact regression:
+  drumming A1→A2 produces two distinct DrumPad hits and never Undo.
+- 20 test suites green; make ci ALL GATES GREEN.
+
 ## [0.1.2] — 2026-11-04
 
 ### Added — UI modernization ("one screen = the instrument")

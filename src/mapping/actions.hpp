@@ -30,6 +30,7 @@ enum class Action : std::uint16_t {
     TrackSend,
     MasterVolume,
     TrackSelect,   // pads: param = track index
+    DrumPad,       // pads bank A: param = pad index (sound via RT path)
 
     // --- instrument (knobs, per selected track) ---
     FilterCutoff,
@@ -45,7 +46,7 @@ enum class Action : std::uint16_t {
     PadBankToggle, // pad bank A/B switch
     ClipLaunch,    // pads bank B: param = clip index
     ClipStop,
-    ChordSlot,     // pads bank A alt: param = slot
+    ChordSlot,     // pads bank B 3-8: chord memory; delta 0=press 1=release
 
     // --- misc ---
     ArpToggle,
@@ -77,6 +78,7 @@ enum class Action : std::uint16_t {
     case Action::TrackSend: return "mix.track_send";
     case Action::MasterVolume: return "mix.master";
     case Action::TrackSelect: return "track.select";
+    case Action::DrumPad: return "pads.drum";
     case Action::FilterCutoff: return "synth.filter_cutoff";
     case Action::FilterReso: return "synth.filter_reso";
     case Action::EnvAttack: return "synth.env_attack";

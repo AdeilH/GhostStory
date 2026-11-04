@@ -26,17 +26,12 @@ std::string const& default_profile_toml() {
 8.cc = 8    # env release
 
 [pads]
-# Bank A (notes 36..43): drum kit / chord slots; Bank B (44..51): clip launch.
+# PLAY: 36..43 = drum pads (8 distinct kit sounds), 44/45 = undo/redo,
+# 46..51 = chord memory slots (tap = play chord, hold + keys = capture).
+# EDIT: 36..43 = track select. No two-pad chords: drumming must never
+# accidentally erase a take (the old A1+A2 Undo chord did exactly that).
 a.note = 36
 b.note = 44
-
-[modes]
-# EDIT mode entry: hold Bank-A pad 8 while pressing Bank-B pad 8 (chord).
-# Undo/redo chords: Bank-A pad 1 + pad 2 (undo), pad 1 + pad 3 (redo).
-undo.pads = "36,37"
-redo.pads = "36,38"
-edit.chord_pads = "43,51"
-step.chord_pads = "42,50"
 )";
     return kDefault;
 }
@@ -132,51 +127,44 @@ std::vector<Command> MappingEngine::map_cc(std::uint8_t cc, std::uint8_t val) {
 }
 
 std::vector<Command> MappingEngine::map_note(int note, bool on) {
+    // FIX (user report: "pad 1 and pad 2 have same response"): the old
+    // scheme made A1+A2 the Undo chord — drumming A1-then-A2 erased takes,
+    // and ChordSlot/ClipLaunch were never implemented so pads had no
+    // distinct responses. New PLAY-mode semantics, all immediate and
+    // distinct (bank determined by note range, no bank toggle needed):
+    //   36..43  drum pads      -> DrumPad (sound via RT path, distinct hit)
+    //   44      Undo           (press, instant)
+    //   45      Redo           (press, instant)
+    //   46..51  chord slots 0..5 (press/release pairs; hold + keys = capture)
+    // EDIT mode: 36..43 selects tracks (press); 44/45 undo/redo still work.
     std::vector<Command> out;
-    // Keys (channel 0/1, notes outside pad ranges) go straight to the
-    // instrument path in M3; mapping only handles pads (36..51).
-    bool const is_pad = note >= 36 && note <= 51;
-    if (!is_pad) return out;
+    if (note < 36 || note > 51) return out;
 
-    // Pad actions fire on RELEASE so two-pad chords can form. A second pad
-    // pressed while one is held becomes a chord; the held pad's single
-    // action is suppressed in favour of the chord action.
-    if (on) {
-        if (pending_pad_ == 255) {
-            pending_pad_ = static_cast<std::uint8_t>(note);
-            return out;
+    auto push = [&](Action a, int param, int delta) {
+        out.push_back(Command{a, param, delta});
+    };
+
+    if (note <= 43) {  // bank A: drum pads / track select
+        int const pad = note - 36;
+        if (mode_ == Mode::Edit) {
+            if (on) push(Action::TrackSelect, pad, 0);
+        } else if (mode_ == Mode::Step) {
+            // step grid: pattern editor (M-later); mirror pulse only
+            if (on) push(Action::None, pad, 0);
+        } else {
+            if (on) push(Action::DrumPad, pad, 0);
         }
-        if (note == pending_pad_) return out;  // retrigger while held
-        // Chord: order-independent pair check.
-        int const a = std::min<int>(pending_pad_, note);
-        int const b = std::max<int>(pending_pad_, note);
-        pending_pad_ = 255;
-        if (a == 36 && b == 37) out.push_back({Action::Undo, 0, 0});
-        if (a == 36 && b == 38) out.push_back({Action::Redo, 0, 0});
-        if (a == 43 && b == 51) out.push_back({Action::ModeEdit, 0, 0});
-        if (a == 42 && b == 50) out.push_back({Action::ModeStep, 0, 0});
         return out;
     }
 
-    // Pad release.
-    if (pending_pad_ != 255) {
-        if (note == pending_pad_) {
-            pending_pad_ = 255;
-            int const pad = note - (pad_bank_b_ ? 44 : 36);
-            if (pad >= 0 && pad < 8) {
-                Command c;
-                if (mode_ == Mode::Play) {
-                    c.action = pad_bank_b_ ? Action::ClipLaunch
-                                           : Action::ChordSlot;
-                } else if (mode_ == Mode::Edit) {
-                    c.action = Action::TrackSelect;
-                } else {
-                    c.action = Action::None;  // step grid: pattern editor
-                }
-                c.param = pad;
-                out.push_back(c);
-            }
-        }
+    // Bank B: utilities + chord memory.
+    if (note == 44 || note == 45) {
+        if (on) push(note == 44 ? Action::Undo : Action::Redo, 0, 0);
+        return out;
+    }
+    int const slot = note - 46;  // 0..5
+    if (mode_ == Mode::Play) {
+        push(Action::ChordSlot, slot, on ? 0 : 1);
     }
     return out;
 }

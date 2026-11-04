@@ -527,14 +527,19 @@ void MainWindow::timerEvent(QTimerEvent* event) {
 
 void MainWindow::tick() {
     // 1. Drain app events (mapping + recorder). Pad actions carry a
-    // bank-relative pad index 0..7 — mirror it to the absolute pad
-    // (bank A = 0..7, bank B = 8..15) for hit feedback.
-    bool const bank_b = engine_.mapping().pad_bank_b();
+    // pad index — bank A notes 36..43 are DrumPad (absolute 0..7), bank
+    // B utilities/chord-slots are 8..15. Every pad hit pulses its own
+    // pad in the mirror (distinct visual response per pad).
     for (auto const& c : engine_.drain_app_events()) {
         using A = mapping::Action;
-        if (c.action == A::ChordSlot || c.action == A::ClipLaunch ||
-            c.action == A::TrackSelect) {
-            mirror_->pulse_pad(c.param + (bank_b ? 8 : 0));
+        if (c.action == A::DrumPad) {
+            mirror_->pulse_pad(c.param);              // bank A: 0..7
+        } else if (c.action == A::ChordSlot) {
+            mirror_->pulse_pad(10 + c.param);         // slots on B3..B8
+        } else if (c.action == A::Undo || c.action == A::Redo) {
+            mirror_->pulse_pad(c.action == A::Undo ? 8 : 9);  // B1/B2
+        } else if (c.action == A::TrackSelect) {
+            mirror_->pulse_pad(c.param);              // bank A rows
         }
     }
 

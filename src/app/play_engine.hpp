@@ -22,6 +22,9 @@
 #include "music/clip.hpp"
 #include "music/recorder.hpp"
 #include "music/velocity.hpp"
+
+#include <array>
+#include <chrono>
 #include "project/journal.hpp"
 
 #include <atomic>
@@ -152,6 +155,17 @@ private:
 
     music::Arp arp_;
     std::atomic<bool> arp_on_{false};
+
+    // Chord memory (spec §5): 6 slots on bank-B pads 46..51.
+    // press: sound the stored chord (if any); hold >= 400 ms with keys held:
+    // capture current keys into the slot on release. Distinct musical
+    // response per pad — the fix for the "pads all same" complaint.
+    static constexpr int kChordSlots = 6;
+    std::array<std::vector<int>, kChordSlots> chord_slots_{};
+    std::array<std::chrono::steady_clock::time_point, kChordSlots>
+        chord_press_{};
+    std::vector<int> chord_sounding_;   // notes currently held by a slot
+    std::vector<int> chord_held_keys_;  // keys held right now (absolute)
     std::atomic<float> master_level_{0.0f};  // RT: peak |sample| per buffer
     std::atomic<bool> scale_lock_{false};
     music::Scale const* scale_{&music::kScales[0]};  // chromatic default

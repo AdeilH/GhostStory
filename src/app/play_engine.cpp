@@ -122,7 +122,7 @@ void PlayEngine::on_midi(midi::MidiEvent const& ev) {
         // (pads) is control-plane → app queue. Both also reach the app for
         // recording/mirror state.
         if (ev.channel == 9 && ev.is_note_on() && ev.note() >= 36 &&
-            ev.note() <= 51) {
+            ev.note() <= 43) {
             VoiceCmd vc{};
             vc.channel = 9;
             vc.note = static_cast<std::uint8_t>(ev.note());
@@ -237,11 +237,16 @@ std::vector<mapping::Command> PlayEngine::drain_app_events() {
                 command(c);
                 all.push_back(c);
             }
-            if (arp && ev.channel != 9) {
+            if (ev.channel != 9) {
                 int const n = ev.note() + octave_ * 12;
                 if (n >= 0 && n <= 127) {
-                    if (ev.is_note_on()) arp_.note_on(n);
-                    else arp_.note_off(n);
+                    if (ev.is_note_on()) {
+                        chord_held_keys_.push_back(n);
+                        if (arp) arp_.note_on(n);
+                    } else {
+                        std::erase(chord_held_keys_, n);
+                        if (arp) arp_.note_off(n);
+                    }
                 }
             }
             if (recording_ && !ev.is_note_on() && ev.note() >= 36 &&
@@ -255,7 +260,7 @@ std::vector<mapping::Command> PlayEngine::drain_app_events() {
                 journal_new_events(before);
             }
             if (recording_ && ev.is_note_on() && ev.note() >= 36 &&
-                ev.note() <= 51) {
+                ev.note() <= 43) {
                 double const ticks =
                     now_ticks(audio_.transport_position(),
                               ctrl.tempo_bpm.load(std::memory_order_relaxed),
@@ -383,6 +388,58 @@ void PlayEngine::command(mapping::Command const& c) {
     case A::TrackSelect:
         selected_track_ = c.param;
         break;
+    case A::DrumPad:
+        // Sound came via the RT queue; recorder records in drain. Nothing
+        // else to do — the pad's response is its distinct drum hit.
+        break;
+    case A::ChordSlot: {
+        int const slot = c.param;
+        if (slot < 0 || slot >= kChordSlots) break;
+        if (c.delta == 0) {
+            chord_press_[static_cast<std::size_t>(slot)] =
+                std::chrono::steady_clock::now();
+            // Trigger stored chord (note-ons), unless empty.
+            auto const& chord = chord_slots_[static_cast<std::size_t>(slot)];
+            if (!chord.empty() && chord_sounding_.empty()) {
+                for (int n : chord) {
+                    VoiceCmd vc{};
+                    vc.note = static_cast<std::uint8_t>(
+                        n < 0 ? 0 : (n > 127 ? 127 : n));
+                    vc.channel = 0;
+                    vc.velocity = 100;
+                    vc.on = true;
+                    if (!synth_q_.push(vc)) break;  // RT queue full: drop
+                }
+                chord_sounding_ = chord;
+            }
+        } else {
+            auto const held_ms = std::chrono::duration_cast<
+                std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                           chord_press_[static_cast<
+                                               std::size_t>(slot)])
+                .count();
+            if (held_ms >= 400 && !chord_held_keys_.empty()) {
+                // Capture: hold slot + play keys -> store the chord.
+                chord_slots_[static_cast<std::size_t>(slot)] =
+                    chord_held_keys_;
+                log::info("app", "chord slot {} captured ({} notes)", slot,
+                          chord_held_keys_.size());
+            }
+            // Note-offs for a sounding chord.
+            if (!chord_sounding_.empty()) {
+                for (int n : chord_sounding_) {
+                    VoiceCmd vc{};
+                    vc.note = static_cast<std::uint8_t>(
+                        n < 0 ? 0 : (n > 127 ? 127 : n));
+                    vc.channel = 0;
+                    vc.on = false;
+                    if (!synth_q_.push(vc)) break;  // RT queue full: drop
+                }
+                chord_sounding_.clear();
+            }
+        }
+        break;
+    }
     case A::LoopBarsSet:
         ctrl.loop_bars.store(static_cast<std::uint64_t>(c.param));
         break;

@@ -30,7 +30,12 @@ std::vector<CoverageEntry> const& coverage_table() {
                 add(id, Mode::Step, Action::None);
             }
         }
-        // Pads B — clip launch in Play, transport/utility toggles in Edit.
+        // Pads B — utilities + chord memory in Play (44=undo, 45=redo,
+        // 46..51 = chord slots 0..5); Edit keeps utility toggles.
+        static Action const play_pad_b[8] = {
+            Action::Undo, Action::Redo, Action::ChordSlot, Action::ChordSlot,
+            Action::ChordSlot, Action::ChordSlot, Action::ChordSlot,
+            Action::ChordSlot};
         static Action const edit_pad_actions[8] = {
             Action::MetronomeToggle, Action::CountInToggle,
             Action::LoopToggle,      Action::PunchToggle,
@@ -41,9 +46,10 @@ std::vector<CoverageEntry> const& coverage_table() {
             for (int col = 1; col <= 4; ++col) {
                 std::string const id = "pad.b" + std::to_string(row) +
                                        std::to_string(col);
-                add(id, Mode::Play, Action::ClipLaunch);
-                add(id, Mode::Edit, edit_pad_actions[eb++]);
+                add(id, Mode::Play, play_pad_b[eb]);
+                add(id, Mode::Edit, edit_pad_actions[eb]);
                 add(id, Mode::Step, Action::None);
+                ++eb;
             }
         }
         // Knobs 1-8 — different roles per mode (all three covered).

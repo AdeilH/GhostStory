@@ -59,7 +59,6 @@ private:
     bool pad_bank_b_{false};
     std::uint8_t knob_cc_[8]{1, 2, 3, 4, 5, 6, 7, 8};  // from profile
     std::uint8_t knob_values_[8]{};
-    std::uint8_t pending_pad_{255};  // pad held, awaiting release/chord
 
     std::string profile_error_;
 };
