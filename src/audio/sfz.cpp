@@ -1,4 +1,4 @@
-// addu94 — src/audio/sfz.cpp
+// ghost_story — src/audio/sfz.cpp
 //
 // SFZ v1 practical-subset parser implementing the contract in sfz.hpp.
 //
@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 namespace {
 
@@ -477,4 +477,4 @@ bool sampler_load_sfz(Sampler& sampler, std::string const& sfz_path,
     return true;
 }
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

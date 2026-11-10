@@ -1,4 +1,4 @@
-// addu94 — src/core/mpmc_queue.hpp
+// ghost_story — src/core/mpmc_queue.hpp
 //
 // Bounded MPMC ring buffer (Dmitry Vyukov's algorithm), used where multiple
 // threads log or emit events concurrently (logger, ops events). The audio
@@ -17,7 +17,7 @@
 
 #include "core/spsc_queue.hpp"  // kCacheLine
 
-namespace addu94::core {
+namespace ghost_story::core {
 
 template <typename T, std::size_t CapacityPow2>
 class MpmcQueue {
@@ -120,4 +120,4 @@ private:
     alignas(kCacheLine) std::array<Cell, CapacityPow2> cells_;
 };
 
-}  // namespace addu94::core
+}  // namespace ghost_story::core

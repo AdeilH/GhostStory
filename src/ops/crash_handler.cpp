@@ -1,4 +1,4 @@
-// addu94 — src/ops/crash_handler.cpp
+// ghost_story — src/ops/crash_handler.cpp
 #include "ops/crash_handler.hpp"
 
 #include <fcntl.h>
@@ -11,7 +11,7 @@
 #include <cstring>
 #include <ctime>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 namespace {
 
@@ -19,6 +19,9 @@ namespace {
 // can miss the table-driven reference.
 [[maybe_unused]]
 int g_report_fd{-1};
+// Path of this run's report file (set once by install(), used by the
+// clean-shutdown unlink). Not touched from the signal handler.
+char g_report_path[512]{};
 
 void write_all(int fd, char const* s) noexcept {
     if (fd < 0 || s == nullptr) return;
@@ -39,13 +42,19 @@ void write_all(int fd, char const* s) noexcept {
         std::snprintf(buf, sizeof(buf), "%d", sig);
         write_all(g_report_fd, buf);
         write_all(g_report_fd, ",\"name\":\"");
-        // Signal-name lookup table (static, handler-safe).
-        static char const* const names[] = {"", "SIGHUP", "SIGINT", "SIGQUIT",
-                                            "SIGILL", "SIGTRAP", "SIGABRT",
-                                            "SIGBUS", "SIGFPE", "SIGKILL",
-                                            "SIGUSR1", "SIGSEGV"};
+        // Signal-name lookup table (static, handler-safe). Covers 0..15:
+        // the fatals (11 SEGV, 7 ABRT...) AND the terminators (1 HUP,
+        // 2 INT, 15 TERM) — a killed process must never look like a
+        // segfaulted one (user report: "it stopped playing for a while",
+        // every report zero-byte, cause unknowable).
+        static char const* const names[] = {"",      "SIGHUP",  "SIGINT",
+                                            "SIGQUIT", "SIGILL", "SIGTRAP",
+                                            "SIGABRT", "SIGBUS", "SIGFPE",
+                                            "SIGKILL", "SIGUSR1", "SIGSEGV",
+                                            "SIGUSR2", "SIGPIPE", "SIGALRM",
+                                            "SIGTERM"};
         write_all(g_report_fd,
-                  sig > 0 && sig < 12 ? names[sig] : "unknown");
+                  sig > 0 && sig < 16 ? names[sig] : "unknown");
         write_all(g_report_fd, "\",\"backtrace\":[");
         void* frames[64];
         int const n = ::backtrace(frames, 64);
@@ -72,12 +81,16 @@ bool CrashHandler::install() {
                   static_cast<long long>(::time(nullptr)));
     ::mkdir(dir.c_str(), 0755);
     g_report_fd = ::open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
-
+    std::snprintf(g_report_path, sizeof(g_report_path), "%s", path);
 
     struct SigEntry { int sig; char const* name; };
     static SigEntry const entries[] = {
         {SIGSEGV, "SIGSEGV"}, {SIGABRT, "SIGABRT"}, {SIGFPE, "SIGFPE"},
-        {SIGBUS, "SIGBUS"}, {SIGILL, "SIGILL"},
+        {SIGBUS, "SIGBUS"},   {SIGILL, "SIGILL"},
+        // Terminators: recorded (with backtrace) so a SIGTERM/SIGINT/
+        // SIGHUP death is visible in the report instead of leaving a
+        // zero-byte ambiguity. Still re-raised default afterwards.
+        {SIGTERM, "SIGTERM"}, {SIGINT, "SIGINT"}, {SIGHUP, "SIGHUP"},
     };
     for (auto const& e : entries) {
         struct sigaction sa{};
@@ -104,6 +117,19 @@ void CrashHandler::clear_safe_mode_flag() {
     ::unlink(flag);
 }
 
+void CrashHandler::mark_clean_shutdown() {
+    // This run's report: keep it ONLY if the signal handler wrote
+    // something (a non-empty file is evidence); an empty one was just a
+    // startup marker and would masquerade as a crash forever.
+    if (g_report_path[0] != '\0') {
+        struct stat st{};
+        if (::stat(g_report_path, &st) == 0 && st.st_size == 0) {
+            ::unlink(g_report_path);
+        }
+    }
+    clear_safe_mode_flag();
+}
+
 std::string CrashHandler::crash_dir() {
     char const* home = ::getenv("XDG_DATA_HOME");
     std::string base = (home != nullptr && home[0] != '\0')
@@ -112,7 +138,7 @@ std::string CrashHandler::crash_dir() {
                                              ? ::getenv("HOME")
                                              : "."} +
                                  "/.local/share";
-    return base + "/addu94/crashes";
+    return base + "/ghost_story/crashes";
 }
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

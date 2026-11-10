@@ -1,4 +1,4 @@
-// addu94 — src/music/quantize.hpp
+// ghost_story — src/music/quantize.hpp
 //
 // Quantizer (spec §2.5): snaps recorded MIDI event times to the grid.
 // Pure functions over (tick, grid) — property-tested. Grids: off, 1/4,
@@ -10,7 +10,7 @@
 
 #include "music/transport.hpp"  // kPPQ
 
-namespace addu94::music {
+namespace ghost_story::music {
 
 enum class Grid : std::uint8_t {
     Off = 0,
@@ -70,4 +70,4 @@ enum class Grid : std::uint8_t {
     return "?";
 }
 
-}  // namespace addu94::music
+}  // namespace ghost_story::music

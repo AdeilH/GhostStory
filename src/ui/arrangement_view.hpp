@@ -1,22 +1,30 @@
-// addu94 — src/ui/arrangement_view.hpp
+// ghost_story — src/ui/arrangement_view.hpp
 //
 // ArrangementView — the song canvas of the "one screen = the instrument"
 // layout. Custom-painted: bar ruler with section-colored bands (intro /
-// verse / chorus defaults at bars 0 / 8 / 16), 4 track lanes, big rounded
-// pattern blocks (per-track hue gradient, soft shadow, name label), grid,
-// glowing playhead with a soft trailing gradient, and loop-region shading
-// from transport_control().loop_bars.
+// verse/ chorus defaults at bars 0 / 8 / 16), one lane per active track,
+// big rounded pattern blocks (per-track hue gradient, soft shadow, name
+// label), grid, glowing playhead with a soft trailing gradient, and
+// loop-region shading from transport_control().loop_bars.
 //
-// Interactions (view state — engine arrangement wiring lands with M5):
-//   click            → move the bar cursor
-//   drag a block     → move it horizontally, snap to whole bars on release
-//                      (stored in clip_start_bar_)
-//   double-click     → empty lane: extend that lane's clip block +1 bar
-//                      (or create a 1-bar block) — view state only
+// REAL CLIPS (loop machine): each lane shows that track's actual recording
+// fed from the engine every UI tick — the blocks ARE the takes, not copies.
+// Every recorded take draws its OWN block ([rec 1] [rec 2] both visible,
+// user report: "it removes rec 1 — we want both"), while a track with no
+// recorded takes draws its reserved window as a faint dashed outline.
+//   click anywhere        → move the playhead (play/record start there)
+//   drag a block's edge   → resize THAT take, engine-committed on release
+//   drag a block body     → move the track's whole take-group along the
+//                           timeline (snaps to bars)
+//   double-click a block  → extend that take +1 bar
+//   double-click a lane   → reserve a 1-bar window at the clicked bar
+//   right-click a block   → clear THAT take's recording
+// Blocks for removed tracks are pruned every tick — the canvas always
+// mirrors engine truth (the stale-ghost bug: removing instruments left
+// dead blocks painted over "no instruments yet").
 //
 // Plain widget (no Q_OBJECT): refresh() is called from MainWindow's 30 Hz
-// timer; set_clip_block() feeds the current clip as the selected track's
-// block (deduped inside so drags are not clobbered).
+// timer.
 #pragma once
 
 #include "app/play_engine.hpp"
@@ -24,36 +32,39 @@
 #include <QColor>
 #include <QString>
 #include <QWidget>
+#include <array>
 #include <vector>
 
 class QMouseEvent;
 class QPaintEvent;
 
-namespace addu94::ui {
+namespace ghost_story::ui {
 
 class ArrangementView : public QWidget {
 public:
     struct Block {
-        int track;        // 0..3
-        int start_bar;    // first bar (0-based)
+        int track;        // active slot index
+        int take;         // the take this box shows (-1 = reserved window)
+        int start_bar;    // placement (absolute, in bars)
         int length_bars;  // > 0
-        QString name;
+        bool has_notes;   // false = reserved/provisional, nothing recorded
     };
 
     explicit ArrangementView(app::PlayEngine& engine,
                              QWidget* parent = nullptr);
 
-    /// Feed the current clip as a block on `track` with `length_bars`.
-    /// Deduped: repeated identical calls (each UI tick) are no-ops, so an
-    /// in-flight drag or user-extended length is not clobbered.
-    void set_clip_block(int track, int length_bars);
+    /// Feed track `track`'s real takes (the engine's clip boxes) plus its
+    /// reserved window (drawn only while nothing was recorded on the
+    /// track). Deduped per track: repeated identical calls (each UI tick)
+    /// are no-ops so repaints stay cheap.
+    void set_track_clips(
+        int track,
+        std::vector<app::PlayEngine::ClipBoxView> const& boxes,
+        int reserved_start_bar, int reserved_bars, bool reserved_has_notes);
 
-    /// UI-tick hook: re-read playhead/loop from the engine and repaint.
+    /// UI-tick hook: re-read playhead/loop from the engine, prune blocks
+    /// of removed tracks, repaint.
     void refresh();
-
-    /// View-state start bar of the current clip (drag target; engine
-    /// integration comes later).
-    [[nodiscard]] int clip_start_bar() const noexcept { return clip_start_bar_; }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -67,20 +78,43 @@ private:
     [[nodiscard]] double bar_width() const noexcept;
     [[nodiscard]] int bar_at(double x) const noexcept;
     [[nodiscard]] QRectF block_rect(Block const& b) const noexcept;
-    void ensure_block(int track, int length_bars);
+    /// Index into blocks_ of the block whose resize edge (±6px) is under
+    /// (x, y), or -1.
+    [[nodiscard]] int edge_block_index_at(QPointF const& pos) const noexcept;
+    /// Index into blocks_ of the block under (x, y), or -1.
+    [[nodiscard]] int block_index_at(QPointF const& pos) const noexcept;
+    /// Blocks are identified by (track, take) across feeds — a rebuild
+    /// between press and release must not retarget a drag.
+    [[nodiscard]] int block_index_of(int track, int take) const noexcept;
 
     app::PlayEngine& engine_;
-    std::vector<Block> blocks_;
+    std::vector<Block> blocks_;  // one per take box (+ reserved windows)
     double playhead_bars_{0.0};
-    int cursor_bar_{0};
-    int clip_start_bar_{0};   // view state: current clip start (drag target)
-    int clip_len_bars_{0};    // last length fed by MainWindow (dedupe)
 
-    // Drag state.
-    bool dragging_{false};
-    int drag_index_{-1};
-    double drag_grab_offset_{0.0};  // bars between block start and grab point
-    double drag_pos_{0.0};          // live (unsnapped) start during drag
+    // Feed dedupe, per track: the last boxes + reserved window seen.
+    std::array<std::vector<app::PlayEngine::ClipBoxView>, app::kTrackCount>
+        fed_boxes_{};
+    std::array<int, app::kTrackCount> fed_reserved_start_{};
+    std::array<int, app::kTrackCount> fed_reserved_bars_{};
+    std::array<bool, app::kTrackCount> fed_reserved_notes_{};
+
+    // Edge-resize drag state (engine-committed on release).
+    bool resizing_{false};
+    int resize_track_{-1};
+    int resize_take_{-1};
+    int resize_bars_{0};  // live (uncommitted) length during the drag
+
+    // Move drag: the track's whole take-group relocates ("record a portion
+    // and drop it in the play bar") — body-drag moves, snap-to-bar on
+    // release, committed through engine_.set_clip_start with the window
+    // start derived from the dragged box's delta.
+    bool moving_{false};
+    int move_track_{-1};
+    int move_take_{-1};
+    int move_window_start_{0};   // the group's window start at press
+    double move_grab_offset_{0.0};
+    int move_box_start_{0};      // the grabbed box's start at press
+    int move_start_bar_{0};      // live (uncommitted) placement during drag
 };
 
-}  // namespace addu94::ui
+}  // namespace ghost_story::ui

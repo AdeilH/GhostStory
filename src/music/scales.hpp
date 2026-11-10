@@ -1,4 +1,4 @@
-// addu94 — src/music/scales.hpp
+// ghost_story — src/music/scales.hpp
 //
 // Scale tables (constexpr, evaluated at compile time — ADR 001 C++26
 // constexpr usage) and scale-lock (spec §2.6): wrong notes snap to the
@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace addu94::music {
+namespace ghost_story::music {
 
 struct Scale {
     std::string_view name;
@@ -57,4 +57,4 @@ inline constexpr std::array<Scale, 8> kScales{{
     return note;  // chromatic fallback can't happen; safety net
 }
 
-}  // namespace addu94::music
+}  // namespace ghost_story::music

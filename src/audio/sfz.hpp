@@ -1,4 +1,4 @@
-// addu94 — src/audio/sfz.hpp
+// ghost_story — src/audio/sfz.hpp
 //
 // Practical-subset SFZ v1 parser + Sampler loader (spec §4.1).
 //
@@ -47,7 +47,7 @@
 
 #include "audio/sampler.hpp"
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 /// One parsed <region> (group defaults already folded in).
 struct SfzRegion {
@@ -89,4 +89,4 @@ struct SfzParseResult {
 bool sampler_load_sfz(Sampler& sampler, std::string const& sfz_path,
                       std::string& error);
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

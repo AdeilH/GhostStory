@@ -1,4 +1,4 @@
-// addu94 — tests/test_sfz.cpp
+// ghost_story — tests/test_sfz.cpp
 //
 // SFZ parser + sampler_load_sfz tests (spec §4.1). Covers: field parsing
 // (key / lokey-hikey / pitch_keycenter / transpose / volume / tune), group
@@ -21,16 +21,16 @@
 #include <string>
 #include <vector>
 
-using addu94::audio::SfzParseResult;
-using addu94::audio::SfzRegion;
-using addu94::audio::Sampler;
-using addu94::audio::WavData;
+using ghost_story::audio::SfzParseResult;
+using ghost_story::audio::SfzRegion;
+using ghost_story::audio::Sampler;
+using ghost_story::audio::WavData;
 
 namespace {
 
 constexpr double kSr = 48000.0;
 constexpr double kTwoPi = 6.283185307179586476925286766559;
-std::string const kTmpDir = "/tmp/addu94_sfz_test";
+std::string const kTmpDir = "/tmp/ghost_story_sfz_test";
 
 // ---------------------------------------------------------------- helpers
 
@@ -60,7 +60,7 @@ bool write_sine_wav(std::string const& path, double hz, double amp = 0.9) {
         w.samples[i] = static_cast<float>(amp * std::sin(kTwoPi * hz * t));
     }
     std::string err;
-    return addu94::audio::wav_save(path, w, err);
+    return ghost_story::audio::wav_save(path, w, err);
 }
 
 /// Render `seconds` of one note_on through chunked render() calls.
@@ -109,7 +109,7 @@ TEST(sfz, parses_fields_and_resolves_relative_paths) {
 
     std::string err;
     std::optional<SfzParseResult> const res =
-        addu94::audio::sfz_load(sfz_path, err);
+        ghost_story::audio::sfz_load(sfz_path, err);
     CHECK(err.empty());
     CHECK(res.has_value());
     if (!res.has_value()) return;
@@ -155,7 +155,7 @@ TEST(sfz, group_defaults_inherited_and_reset) {
 
     std::string err;
     std::optional<SfzParseResult> const res =
-        addu94::audio::sfz_load(sfz_path, err);
+        ghost_story::audio::sfz_load(sfz_path, err);
     CHECK(res.has_value());
     if (!res.has_value()) return;
     CHECK_EQ(res->regions.size(), std::size_t{4});
@@ -181,7 +181,7 @@ TEST(sfz, opcodes_before_any_header_are_group_defaults) {
                      "<region> sample=sine880.wav key=41\n"));
     std::string err;
     std::optional<SfzParseResult> const res =
-        addu94::audio::sfz_load(sfz_path, err);
+        ghost_story::audio::sfz_load(sfz_path, err);
     CHECK(res.has_value());
     if (!res.has_value()) return;
     CHECK_EQ(res->regions.size(), std::size_t{2});
@@ -198,7 +198,7 @@ TEST(sfz, clamps_and_swapped_ranges_are_normalized_or_skipped) {
                      "<region> sample=sine440.wav lokey=90 hikey=10\n"));
     std::string err;
     std::optional<SfzParseResult> const res =
-        addu94::audio::sfz_load(sfz_path, err);
+        ghost_story::audio::sfz_load(sfz_path, err);
     CHECK(res.has_value());
     if (!res.has_value()) return;
     // Region 1: clamped into range; region 2: inverted key range => skipped.
@@ -225,7 +225,7 @@ TEST(sfz, garbage_tokens_and_unknown_opcodes_do_not_break_parsing) {
                      "=broken\n"));
     std::string err;
     std::optional<SfzParseResult> const res =
-        addu94::audio::sfz_load(sfz_path, err);
+        ghost_story::audio::sfz_load(sfz_path, err);
     CHECK(res.has_value());
     CHECK(err.empty());
     if (!res.has_value()) return;
@@ -246,7 +246,7 @@ TEST(sfz, dotdot_escape_skips_region_at_parse_time) {
                      "<region> sample=sine440.wav key=38\n"));
     std::string err;
     std::optional<SfzParseResult> const res =
-        addu94::audio::sfz_load(sfz_path, err);
+        ghost_story::audio::sfz_load(sfz_path, err);
     CHECK(res.has_value());  // file readable: parse succeeds
     if (!res.has_value()) return;
     // Parse is text-only: the missing-file region still parses (existence
@@ -262,13 +262,13 @@ TEST(sfz, dotdot_escape_skips_region_at_parse_time) {
 
 TEST(sfz, unreadable_file_is_clean_error) {
     std::string err;
-    std::optional<SfzParseResult> const res = addu94::audio::sfz_load(
-        "/tmp/addu94_sfz_test/no_such_file.sfz", err);
+    std::optional<SfzParseResult> const res = ghost_story::audio::sfz_load(
+        "/tmp/ghost_story_sfz_test/no_such_file.sfz", err);
     CHECK(!res.has_value());
     CHECK(!err.empty());
 
     std::optional<SfzParseResult> const res2 =
-        addu94::audio::sfz_load("/tmp/addu94_sfz_test", err);
+        ghost_story::audio::sfz_load("/tmp/ghost_story_sfz_test", err);
     CHECK(!res2.has_value());
     CHECK(!err.empty());
 }
@@ -287,7 +287,7 @@ TEST(sfz, sampler_load_maps_notes_and_sounds_two_pitches) {
     Sampler s;
     s.set_sample_rate(kSr);
     std::string err;
-    CHECK(addu94::audio::sampler_load_sfz(s, sfz_path, err));
+    CHECK(ghost_story::audio::sampler_load_sfz(s, sfz_path, err));
     CHECK(err.empty());
     CHECK(s.has_zone(60));  // from `key`
     CHECK(s.has_zone(62));  // from lokey (range center default = lo_key)
@@ -322,7 +322,7 @@ TEST(sfz, transpose_and_pitch_keycenter_shift_the_zone_note) {
     Sampler s;
     s.set_sample_rate(kSr);
     std::string err;
-    CHECK(addu94::audio::sampler_load_sfz(s, sfz_path, err));
+    CHECK(ghost_story::audio::sampler_load_sfz(s, sfz_path, err));
     CHECK(s.has_zone(62));  // key 60 + transpose 2
     CHECK(s.has_zone(48));  // pitch_keycenter wins over key/lokey
     CHECK(!s.has_zone(60));
@@ -345,7 +345,7 @@ TEST(sfz, volume_minus_6db_peaks_roughly_half) {
 
     // Reference: same WAV loaded directly at 0 dB.
     CHECK(loud.add_zone(40, kTmpDir + "/sine440.wav", err));
-    CHECK(addu94::audio::sampler_load_sfz(quiet, sfz_path, err));
+    CHECK(ghost_story::audio::sampler_load_sfz(quiet, sfz_path, err));
 
     loud.note_on(0, 40, 1.0f);
     Rendered const rl = render_for(loud, 0.1);
@@ -371,7 +371,7 @@ TEST(sfz, first_matching_region_wins_for_duplicate_notes) {
     Sampler s;
     s.set_sample_rate(kSr);
     std::string err;
-    CHECK(addu94::audio::sampler_load_sfz(s, sfz_path, err));
+    CHECK(ghost_story::audio::sampler_load_sfz(s, sfz_path, err));
     CHECK(s.has_zone(60));
     CHECK(s.has_zone(61));
     // Zone 60 keeps the first region's content: 440 Hz.
@@ -396,7 +396,7 @@ TEST(sfz, malformed_sfz_skips_broken_regions_and_reports_clean_error) {
     Sampler s;
     s.set_sample_rate(kSr);
     std::string err;
-    CHECK(addu94::audio::sampler_load_sfz(s, sfz_path, err));
+    CHECK(ghost_story::audio::sampler_load_sfz(s, sfz_path, err));
     CHECK(err.empty());  // some regions loaded: not a failure
     CHECK(s.has_zone(38));
     CHECK(!s.has_zone(36));  // missing sample skipped
@@ -410,15 +410,15 @@ TEST(sfz, malformed_sfz_skips_broken_regions_and_reports_clean_error) {
                      "<region> sample=../nope.wav key=37\n"));
     Sampler s2;
     std::string err2;
-    CHECK(!addu94::audio::sampler_load_sfz(s2, bad_path, err2));
+    CHECK(!ghost_story::audio::sampler_load_sfz(s2, bad_path, err2));
     CHECK(!err2.empty());
 }
 
 TEST(sfz, unreadable_sfz_fails_sampler_load) {
     Sampler s;
     std::string err;
-    CHECK(!addu94::audio::sampler_load_sfz(
-        s, "/tmp/addu94_sfz_test/absent.sfz", err));
+    CHECK(!ghost_story::audio::sampler_load_sfz(
+        s, "/tmp/ghost_story_sfz_test/absent.sfz", err));
     CHECK(!err.empty());
 }
 

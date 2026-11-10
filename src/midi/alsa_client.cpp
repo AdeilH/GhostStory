@@ -1,4 +1,4 @@
-// addu94 — src/midi/alsa_client.cpp
+// ghost_story — src/midi/alsa_client.cpp
 #include "midi/alsa_client.hpp"
 
 #include "log/logger.hpp"
@@ -8,7 +8,7 @@
 #include <mutex>
 #include <poll.h>
 
-namespace addu94::midi {
+namespace ghost_story::midi {
 
 namespace {
 
@@ -157,7 +157,7 @@ bool AlsaClient::connect_input(int client, int port) {
         return false;
     }
     connected_inputs_.emplace_back(client, port);
-    log::info("midi", "connected input {}:{} -> addu94", client, port);
+    log::info("midi", "connected input {}:{} -> ghost_story", client, port);
     return true;
 }
 
@@ -167,7 +167,7 @@ bool AlsaClient::connect_output(int client, int port) {
                   snd_strerror(errno));
         return false;
     }
-    log::info("midi", "connected addu94 output -> {}:{}", client, port);
+    log::info("midi", "connected ghost_story output -> {}:{}", client, port);
     return true;
 }
 
@@ -194,6 +194,7 @@ bool AlsaClient::send_sysex(std::uint8_t const* data, std::size_t len) {
 }
 
 void AlsaClient::input_loop() {
+    ghost_story::log::Logger::set_thread_name("midi");
     int const npfds = snd_seq_poll_descriptors_count(seq_, POLLIN);
     std::vector<pollfd> pfds(static_cast<std::size_t>(npfds));
     // Fill descriptors ONCE, before the loop: zero-initialised pfds
@@ -345,4 +346,4 @@ void AlsaClient::handle_seq_event(snd_seq_event_t* ev) {
     deliver(m);
 }
 
-}  // namespace addu94::midi
+}  // namespace ghost_story::midi

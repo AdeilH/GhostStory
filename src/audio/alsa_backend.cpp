@@ -1,6 +1,7 @@
-// addu94 — src/audio/alsa_backend.cpp
+// ghost_story — src/audio/alsa_backend.cpp
 #include "audio/alsa_backend.hpp"
 
+#include "audio/capture_ring.hpp"
 #include "log/logger.hpp"
 
 #include <cerrno>
@@ -9,7 +10,7 @@
 #include <ctime>
 #include <thread>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 namespace {
 
@@ -166,6 +167,92 @@ bool AlsaBackend::open(BackendConfig const& cfg, std::string& reason) {
     interleaved_.assign(frames * 2, 0.0F);
     period_frames_ = static_cast<std::uint32_t>(actual_period);
     pcm_ = pcm;
+
+    // --- Optional capture path (live mic) -------------------------------
+    // Same period geometry as playback where the device allows. "default"
+    // rides the plug layer, so FLOAT_LE is near-universally negotiable;
+    // S16_LE is the fallback with in-thread conversion. ANY failure here
+    // downgrades to playback-only with a warning — never fatal.
+    capture_ring_ = cfg.capture_ring;
+    cap_pcm_ = nullptr;
+    cap_s16_ = false;
+    unsigned int cap_rate = approx_rate;  // logged below even on failure
+    if (capture_ring_ != nullptr) {
+        snd_pcm_t* cap = nullptr;
+        int crc = snd_pcm_open(&cap, dev, SND_PCM_STREAM_CAPTURE, 0);
+        bool cap_ok = crc >= 0;
+        snd_pcm_hw_params_t* chw = nullptr;
+        if (cap_ok) snd_pcm_hw_params_malloc(&chw);
+        auto cap_fail = [&](char const* what, int err) {
+            log::warn("audio", "alsa capture disabled ({}: {})", what,
+                      snd_strerror(err));
+            if (chw != nullptr) snd_pcm_hw_params_free(chw);
+            if (cap != nullptr) snd_pcm_close(cap);
+            cap = nullptr;
+            cap_ok = false;
+        };
+        if (cap_ok && chw != nullptr) {
+            crc = snd_pcm_hw_params_any(cap, chw);
+            if (crc >= 0) {
+                crc = snd_pcm_hw_params_set_access(
+                    cap, chw, SND_PCM_ACCESS_RW_INTERLEAVED);
+            }
+            if (crc >= 0) {
+                // Prefer float; a device that refuses it gets S16 + convert.
+                crc = snd_pcm_hw_params_set_format(cap, chw,
+                                                   SND_PCM_FORMAT_FLOAT_LE);
+                if (crc < 0) {
+                    crc = snd_pcm_hw_params_set_format(
+                        cap, chw, SND_PCM_FORMAT_S16_LE);
+                    cap_s16_ = crc >= 0;
+                }
+            }
+            if (crc >= 0) {
+                crc = snd_pcm_hw_params_set_channels(cap, chw, 2);
+            }
+            unsigned int cap_rate_local = cap_rate;
+            int cdir = 0;
+            if (crc >= 0) {
+                crc = snd_pcm_hw_params_set_rate_near(cap, chw,
+                                                      &cap_rate_local, &cdir);
+                cap_rate = cap_rate_local;
+            }
+            snd_pcm_uframes_t cap_period = want_period;
+            cdir = 0;
+            if (crc >= 0) {
+                crc = snd_pcm_hw_params_set_period_size_near(cap, chw,
+                                                             &cap_period,
+                                                             &cdir);
+            }
+            if (crc >= 0) {
+                crc = snd_pcm_hw_params(cap, chw);
+            }
+            if (crc >= 0) {
+                snd_pcm_uframes_t cap_actual = 0;
+                snd_pcm_hw_params_get_period_size(chw, &cap_actual, &cdir);
+                cap_frames_ = static_cast<std::uint32_t>(cap_actual);
+                cap_left_.assign(cap_actual, 0.0F);
+                cap_right_.assign(cap_actual, 0.0F);
+                cap_raw_.assign(cap_actual * 2 * sizeof(Sample),
+                                std::byte{0});
+            } else {
+                cap_fail("hw params", crc);
+            }
+        } else if (cap_ok) {
+            cap_fail("hw_params_malloc", 0);
+        } else {
+            cap_fail("snd_pcm_open(capture)", crc);
+        }
+        if (cap_ok) {
+            cap_pcm_ = cap;
+            snd_pcm_hw_params_free(chw);
+            log::info("audio",
+                      "alsa capture open: device={} rate={} period={} ({})",
+                      dev, cap_rate, cap_frames_,
+                      cap_s16_ ? "s16le→float" : "float32");
+        }
+    }
+
     stop_.store(false, std::memory_order_relaxed);
     error_.store(false, std::memory_order_relaxed);
     running_.store(false, std::memory_order_relaxed);
@@ -186,13 +273,25 @@ void AlsaBackend::close() noexcept {
         snd_pcm_close(pcm_);
         pcm_ = nullptr;
     }
+    if (cap_pcm_ != nullptr) {
+        snd_pcm_close(cap_pcm_);
+        cap_pcm_ = nullptr;
+    }
+    capture_ring_ = nullptr;
     left_.clear();
     left_.shrink_to_fit();
     right_.clear();
     right_.shrink_to_fit();
     interleaved_.clear();
     interleaved_.shrink_to_fit();
+    cap_left_.clear();
+    cap_left_.shrink_to_fit();
+    cap_right_.clear();
+    cap_right_.shrink_to_fit();
+    cap_raw_.clear();
+    cap_raw_.shrink_to_fit();
     period_frames_ = 512;
+    cap_frames_ = 0;
 }
 
 void AlsaBackend::set_render(RenderFn fn, void* user) noexcept {
@@ -228,6 +327,15 @@ bool AlsaBackend::start() {
         log::warn("audio", "alsa writer thread failed to start");
         return false;
     }
+    if (cap_pcm_ != nullptr && capture_ring_ != nullptr) {
+        if (capturer_.joinable()) capturer_.join();  // never two capturers
+        snd_pcm_prepare(cap_pcm_);
+        try {
+            capturer_ = std::thread([this] noexcept { capture_loop(); });
+        } catch (...) {
+            log::warn("audio", "alsa capture thread failed to start");
+        }
+    }
     log::info("audio", "alsa backend running: rate={} period={}",
               stats_.sample_rate.load(std::memory_order_relaxed),
               period_frames_);
@@ -237,9 +345,11 @@ bool AlsaBackend::start() {
 void AlsaBackend::stop() noexcept {
     stop_.store(true, std::memory_order_release);
     if (writer_.joinable()) writer_.join();
+    if (capturer_.joinable()) capturer_.join();
     // writei wakes within one period once the device drains; after the
-    // join there is nobody touching the handle, so drop is safe.
+    // joins there is nobody touching the handles, so drop is safe.
     if (pcm_ != nullptr) snd_pcm_drop(pcm_);
+    if (cap_pcm_ != nullptr) snd_pcm_drop(cap_pcm_);
     running_.store(false, std::memory_order_release);
 }
 
@@ -274,6 +384,7 @@ void AlsaBackend::enter_error(char const* what, int err) noexcept {
 }
 
 void AlsaBackend::writer_loop() noexcept {
+    ghost_story::log::Logger::set_thread_name("alsa-writer");
     auto const frames = static_cast<snd_pcm_uframes_t>(period_frames_);
     for (;;) {
         if (stop_.load(std::memory_order_acquire)) return;
@@ -356,4 +467,52 @@ void AlsaBackend::writer_loop() noexcept {
     }
 }
 
-}  // namespace addu94::audio
+void AlsaBackend::capture_loop() noexcept {
+    ghost_story::log::Logger::set_thread_name("alsa-cap");
+    auto const frames = static_cast<snd_pcm_uframes_t>(cap_frames_);
+    for (;;) {
+        if (stop_.load(std::memory_order_acquire)) return;
+        snd_pcm_sframes_t const n = snd_pcm_readi(cap_pcm_, cap_raw_.data(),
+                                                  frames);
+        if (n == -EPIPE) {
+            // Capture overrun (we read too slow once): re-arm and continue.
+            record_xrun();
+            snd_pcm_prepare(cap_pcm_);
+            continue;
+        }
+        if (n == -ESTRPIPE) {
+            for (int tries = 0; tries < 100; ++tries) {
+                int const rrc = snd_pcm_resume(cap_pcm_);
+                if (rrc == 0 || rrc == -ENOSYS) break;
+                if (rrc != -EAGAIN) return;  // capture dies quietly
+                std::this_thread::sleep_for(std::chrono::milliseconds{10});
+            }
+            snd_pcm_prepare(cap_pcm_);
+            continue;
+        }
+        if (n <= 0) return;  // any other error: capture ends, playback lives
+        auto const got = static_cast<std::uint32_t>(n);
+        if (cap_s16_) {
+            auto const* s16 = reinterpret_cast<std::int16_t const*>(
+                cap_raw_.data());
+            for (std::uint32_t i = 0; i < got; ++i) {
+                cap_left_[i] = static_cast<float>(
+                                   s16[2 * static_cast<std::size_t>(i)]) /
+                               32768.0F;
+                cap_right_[i] = static_cast<float>(
+                                    s16[2 * static_cast<std::size_t>(i) + 1]) /
+                                32768.0F;
+            }
+        } else {
+            auto const* fin =
+                reinterpret_cast<Sample const*>(cap_raw_.data());
+            for (std::uint32_t i = 0; i < got; ++i) {
+                cap_left_[i] = fin[2 * static_cast<std::size_t>(i)];
+                cap_right_[i] = fin[2 * static_cast<std::size_t>(i) + 1];
+            }
+        }
+        capture_ring_->push(cap_left_.data(), cap_right_.data(), got);
+    }
+}
+
+}  // namespace ghost_story::audio

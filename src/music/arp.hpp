@@ -1,4 +1,4 @@
-// addu94 — src/music/arp.hpp
+// ghost_story — src/music/arp.hpp
 //
 // Software arpeggiator + note repeat (spec §5): for units whose hardware
 // ARP/note-repeat isn't reachable, these run at the transport grid.
@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace addu94::music {
+namespace ghost_story::music {
 
 enum class ArpMode : std::uint8_t { Up, Down, UpDown, Random, Order, Chord };
 
@@ -129,4 +129,4 @@ private:
     std::vector<int> latched_notes_;
 };
 
-}  // namespace addu94::music
+}  // namespace ghost_story::music

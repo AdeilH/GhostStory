@@ -1,4 +1,4 @@
-// addu94 — src/device/probe.cpp
+// ghost_story — src/device/probe.cpp
 #include "device/probe.hpp"
 
 #include "log/logger.hpp"
@@ -7,7 +7,7 @@
 #include <sstream>
 #include <thread>
 
-namespace addu94::device {
+namespace ghost_story::device {
 
 namespace {
 
@@ -69,7 +69,7 @@ struct CaptureSink : midi::EventSink {
 ProbeResult Probe::run(int capture_seconds) {
     ProbeResult result;
     midi::AlsaClient client;
-    if (!client.open("addu94-probe", /*create_virtual=*/false)) {
+    if (!client.open("ghost_story-probe", /*create_virtual=*/false)) {
         result.summary = "ALSA sequencer unavailable";
         return result;
     }
@@ -151,7 +151,7 @@ ProbeResult Probe::run(int capture_seconds) {
     } else {
         ss << "No MPK Mini found among " << ports.size()
            << " MIDI ports; manifest records generic inventory. "
-              "Plug the device and run `addu94 probe` again.";
+              "Plug the device and run `ghost_story probe` again.";
     }
     result.summary = ss.str();
     return result;
@@ -162,4 +162,4 @@ ProbeResult Probe::quick_scan() {
     return p.run(0);
 }
 
-}  // namespace addu94::device
+}  // namespace ghost_story::device

@@ -1,14 +1,14 @@
-// addu94 — src/ops/telemetry.hpp
+// ghost_story — src/ops/telemetry.hpp
 //
 // Local-only, opt-out telemetry (spec §7.1): JSONL session events at
-// ~/.local/share/addu94/telemetry/sessions.jsonl. Deterministic event
+// ~/.local/share/ghost_story/telemetry/sessions.jsonl. Deterministic event
 // schemas; nothing leaves the machine unless the user exports a report.
 #pragma once
 
 #include <cstdint>
 #include <string>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 struct SessionStats {
     std::uint64_t xruns{0};
@@ -32,4 +32,4 @@ public:
     [[nodiscard]] static std::string load_recent(int max_lines);
 };
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

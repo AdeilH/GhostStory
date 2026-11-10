@@ -1,4 +1,4 @@
-// addu94 — src/ops/watchdog.cpp
+// ghost_story — src/ops/watchdog.cpp
 #include "ops/watchdog.hpp"
 
 #include "device/manifest.hpp"
@@ -8,7 +8,7 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 namespace {
 std::uint64_t now_ms() noexcept {
@@ -81,6 +81,7 @@ void Watchdog::stop() noexcept {
 }
 
 void Watchdog::monitor_loop() {
+    ghost_story::log::Logger::set_thread_name("watchdog");
     while (running_.load(std::memory_order_acquire)) {
         auto const now = now_ms();
         for (auto& slot : slots_) {
@@ -141,4 +142,4 @@ void log_incident(std::string const& subsystem, std::string const& kind,
     if (f.good()) f << j.dump() << "\n";
 }
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

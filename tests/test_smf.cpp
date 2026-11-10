@@ -1,4 +1,4 @@
-// addu94 — tests/test_smf.cpp
+// ghost_story — tests/test_smf.cpp
 // SMF export: byte-level structure checks + parse-back with a minimal
 // reader so "valid in external player" is provable without ears.
 #include "test_framework.hpp"
@@ -9,9 +9,9 @@
 #include <fstream>
 #include <vector>
 
-using addu94::music::Clip;
-using addu94::music::ClipEvent;
-using addu94::project::export_smf_type1;
+using ghost_story::music::Clip;
+using ghost_story::music::ClipEvent;
+using ghost_story::project::export_smf_type1;
 
 namespace {
 

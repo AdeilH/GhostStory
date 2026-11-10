@@ -1,4 +1,4 @@
-// addu94 — src/midi/types.hpp
+// ghost_story — src/midi/types.hpp
 //
 // Core MIDI event model. MidiEvent is fixed-size and trivially copyable so
 // it rides the SPSC queues between the ALSA input thread, the mapping layer
@@ -14,7 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace addu94::midi {
+namespace ghost_story::midi {
 
 enum class Type : std::uint8_t {
     NoteOff,
@@ -106,4 +106,4 @@ static_assert(sizeof(MidiEvent) <= 64, "RT event must stay cache-cell small");
     }
 }
 
-}  // namespace addu94::midi
+}  // namespace ghost_story::midi

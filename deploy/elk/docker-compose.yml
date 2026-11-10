@@ -1,0 +1,67 @@
+# Ghost Story — development observability stack.
+#
+# Not for production: security is disabled and every port binds to
+# 127.0.0.1, matching the project's local-first stance (docs/MANUAL.md,
+# "Log shipping & Kibana"). Nothing leaves the machine unless you set a
+# WEBHOOK_URL in scripts/elk_setup.sh.
+#
+#   docker compose -f deploy/elk/docker-compose.yml up -d   # or: make elk-up
+#   bash scripts/elk_setup.sh                               # template + data view + alert rule
+#   bash scripts/elk_smoke.sh                               # end-to-end gate
+name: ghost-story-elk
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-9.2.2}
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      # Override ES_PORT/KIBANA_PORT if 9200/5601 are already in use on the
+      # host (export the vars, or put them in deploy/elk/.env).
+      - "${ES_BIND:-127.0.0.1}:${ES_PORT:-9200}:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION:-9.2.2}
+    # host-gateway: lets a WEBHOOK_URL like http://host.docker.internal:PORT
+    # deliver alert webhooks to a listener on the host (dev convenience).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      # Connectors (alert delivery) are encrypted saved objects — without a
+      # key, creating one is an opaque HTTP 500. Override for anything
+      # longer-lived than this dev stack.
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${KIBANA_ENCRYPTION_KEY:-ghost_story_dev_encryption_key_change_me_0123456789}
+    ports:
+      - "${KIBANA_BIND:-127.0.0.1}:${KIBANA_PORT:-5601}:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:${ELASTIC_VERSION:-9.2.2}
+    # --strict.perms=false: the config is mounted read-only from the repo,
+    # which Beats' ownership check would otherwise reject.
+    command: filebeat -e --strict.perms=false
+    user: root
+    environment:
+      - ES_URL=http://elasticsearch:9200
+    volumes:
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      # Host-side app data (logs/app.jsonl, incidents.jsonl), read-only.
+      - ${GHOST_STORY_DATA_DIR:-$HOME/.local/share/ghost_story}:/data:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+volumes:
+  es-data:

@@ -1,4 +1,4 @@
-// addu94 — src/audio/wav_file.hpp
+// ghost_story — src/audio/wav_file.hpp
 //
 // Minimal RIFF/WAVE reader + writer, stdlib only (spec §4.1). Reads PCM 16-bit
 // and 32-bit float, mono/stereo; writes canonical 32-bit float WAVE.
@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 /// Decoded samples, interleaved (frame k occupies samples[k*channels .. ]).
 struct WavData {
@@ -32,4 +32,4 @@ struct WavData {
 [[nodiscard]] bool wav_save(std::string const& path, WavData const& data,
                             std::string& error);
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

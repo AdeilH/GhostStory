@@ -1,10 +1,10 @@
-# Maintainer: addu94 developers <dev@addu94.local>
-pkgname=addu94
+# Maintainer: ghost_story developers <dev@ghost-story.local>
+pkgname=ghost_story
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="Self-healing song builder for the Akai MPK Mini on Linux"
 arch=('x86_64')
-url="https://example.invalid/addu94"  # set on release
+url="https://example.invalid/ghost_story"  # set on release
 license=('GPL3')
 depends=('alsa-lib' 'pipewire' 'qt6-base' 'gcc-libs')
 makedepends=('cmake' 'ninja' 'pkgconf')
@@ -24,8 +24,8 @@ check() {
 
 package() {
     DESTDIR="$pkgdir" cmake --install build
-    install -Dm644 "$srcdir/$pkgname-$pkgver/docs/addu94.1" \
-        "$pkgdir/usr/share/man/man1/addu94.1"
-    install -Dm644 "$srcdir/$pkgname-$pkgver/packaging/addu94.desktop" \
-        "$pkgdir/usr/share/applications/addu94.desktop"
+    install -Dm644 "$srcdir/$pkgname-$pkgver/docs/ghost_story.1" \
+        "$pkgdir/usr/share/man/man1/ghost_story.1"
+    install -Dm644 "$srcdir/$pkgname-$pkgver/packaging/ghost_story.desktop" \
+        "$pkgdir/usr/share/applications/ghost_story.desktop"
 }

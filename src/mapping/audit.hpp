@@ -1,4 +1,4 @@
-// addu94 — src/mapping/audit.hpp
+// ghost_story — src/mapping/audit.hpp
 //
 // Control coverage audit (spec §5): every physical control on the detected
 // device manifest must be bound in at least one mode. Runs as a CI test —
@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::mapping {
+namespace ghost_story::mapping {
 
 struct CoverageEntry {
     std::string control_id;   // matches manifest Control::id
@@ -28,4 +28,4 @@ struct CoverageEntry {
 [[nodiscard]] std::vector<std::string> audit_coverage(
     std::vector<device::Control> const& controls);
 
-}  // namespace addu94::mapping
+}  // namespace ghost_story::mapping

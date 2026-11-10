@@ -1,11 +1,11 @@
-// addu94 — src/project/smf.cpp
+// ghost_story — src/project/smf.cpp
 #include "project/smf.hpp"
 
 #include "music/transport.hpp"  // kPPQ
 
 #include <cstdio>
 
-namespace addu94::project {
+namespace ghost_story::project {
 
 namespace {
 
@@ -77,11 +77,20 @@ std::vector<std::uint8_t> export_smf_type1(music::Clip const& clip,
     bytes.insert(bytes.end(), tr0.begin(), tr0.end());
 
     // Track 1: clip events. Running delta times; channel events in order.
+    // Placement: events shift by the clip's start_tick so the exported
+    // MIDI matches where the clip sits on the timeline.
     std::vector<std::uint8_t> t1;
     std::uint32_t last_tick = 0;
+    auto const start = clip.start_tick > 0
+                           ? static_cast<std::uint32_t>(clip.start_tick)
+                           : 0u;
+    if (start > 0) {
+        push_vlq(t1, start);  // leading delta to the clip's first position
+        last_tick = start;
+    }
     for (auto const& e : clip.events) {
         if (e.tick < 0) continue;
-        auto const tick = static_cast<std::uint32_t>(e.tick);
+        auto const tick = start + static_cast<std::uint32_t>(e.tick);
         push_vlq(t1, tick - last_tick);
         last_tick = tick;
         std::uint8_t const status =
@@ -92,8 +101,9 @@ std::vector<std::uint8_t> export_smf_type1(music::Clip const& clip,
     }
     // Pad to loop end then EOT.
     if (clip.length_ticks > 0 &&
-        last_tick < static_cast<std::uint32_t>(clip.length_ticks)) {
-        push_vlq(t1, static_cast<std::uint32_t>(clip.length_ticks) - last_tick);
+        last_tick < start + static_cast<std::uint32_t>(clip.length_ticks)) {
+        push_vlq(t1, start + static_cast<std::uint32_t>(clip.length_ticks) -
+                         last_tick);
     } else {
         push_vlq(t1, 0);
     }
@@ -119,4 +129,4 @@ bool write_smf_file(std::string const& path,
     return std::rename(tmp.c_str(), path.c_str()) == 0;
 }
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

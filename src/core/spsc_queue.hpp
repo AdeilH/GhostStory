@@ -1,4 +1,4 @@
-// addu94 — src/core/spsc_queue.hpp
+// ghost_story — src/core/spsc_queue.hpp
 //
 // Wait-free single-producer / single-consumer ring buffer.
 // The foundational realtime primitive: audio callback (consumer) and MIDI
@@ -20,7 +20,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace addu94::core {
+namespace ghost_story::core {
 
 // Pinned to 64 on purpose (GCC -Winterference-size: the std constant's
 // value varies across compiler versions/-mtune, making it unusable in a
@@ -111,4 +111,4 @@ private:
     alignas(kCacheLine) std::array<std::byte, sizeof(T) * CapacityPow2> raw_{};
 };
 
-}  // namespace addu94::core
+}  // namespace ghost_story::core

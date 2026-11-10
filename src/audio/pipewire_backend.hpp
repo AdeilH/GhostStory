@@ -1,4 +1,4 @@
-// addu94 — src/audio/pipewire_backend.hpp
+// ghost_story — src/audio/pipewire_backend.hpp
 //
 // PipeWire-native playback backend (spec §3): a pw_thread_loop + pw_stream
 // negotiating planar f32 stereo (FL/FR). The on_process callback is the RT
@@ -37,7 +37,7 @@
 #include <cstdint>
 #include <string>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 class PipeWireBackend final : public AudioBackend {
 public:
@@ -77,11 +77,19 @@ private:
                                        enum pw_stream_state old_state,
                                        enum pw_stream_state state,
                                        const char* error) noexcept;
+    // Capture stream (live mic): its own events table — only `process`
+    // matters; state churn of the input stream never gates playback.
+    static void on_capture_process_thunk(void* arg) noexcept;
+    static const struct pw_stream_events& capture_stream_events() noexcept;
 
     static const struct pw_stream_events& stream_events() noexcept;
 
     /// RT data thread: fill the dequeued buffer's planes, requeue, time it.
     void handle_process() noexcept;
+    /// RT data thread: push the dequeued capture planes into the ring,
+    /// requeue. Both streams run on the SAME pw_thread_loop, so the ring's
+    /// single-producer guarantee holds.
+    void handle_capture_process() noexcept;
     /// Thread-loop thread: mirror state, marshal deferred Xrun/Error.
     void handle_state_changed(enum pw_stream_state state,
                               const char* error) noexcept;
@@ -93,11 +101,17 @@ private:
 
     pw_thread_loop* loop_{nullptr};
     pw_stream* stream_{nullptr};
+    // Capture stream — created only when cfg.capture_ring was provided;
+    // null = playback-only (capture setup failures downgrade, never fatal).
+    pw_stream* capture_stream_{nullptr};
+    CaptureRing* capture_ring_{nullptr};
 
-    // SPA EnumFormat pod, built once in open() and handed to
+    // SPA EnumFormat pods, built once in open() and handed to
     // pw_stream_connect() on every start().
     std::array<std::uint8_t, kPodBufferSize> pod_buffer_{};
     std::array<const struct spa_pod*, 1> params_{};
+    std::array<std::uint8_t, kPodBufferSize> capture_pod_buffer_{};
+    std::array<const struct spa_pod*, 1> capture_params_{};
     BackendConfig cfg_{};
 
     // Callback hooks: written by non-RT threads, read by the RT thread, so
@@ -125,4 +139,4 @@ private:
     std::atomic<bool> loop_started_{false};
 };
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

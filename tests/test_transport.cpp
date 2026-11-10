@@ -1,4 +1,4 @@
-// addu94 — tests/test_transport.cpp
+// ghost_story — tests/test_transport.cpp
 // Property tests for clock math (spec §11): tempo changes, loop wrap,
 // metronome scheduling, and bit-exact metronome determinism.
 #include "test_framework.hpp"
@@ -9,10 +9,10 @@
 #include <cmath>
 #include <vector>
 
-using addu94::music::kPPQ;
-using addu94::music::PlayState;
-using addu94::music::Transport;
-using addu94::music::TransportControl;
+using ghost_story::music::kPPQ;
+using ghost_story::music::PlayState;
+using ghost_story::music::Transport;
+using ghost_story::music::TransportControl;
 
 namespace {
 struct Rig {
@@ -135,18 +135,18 @@ TEST(transport, tempo_sweep_beats_track_samples_property) {
 
 TEST(metronome, bit_identical_for_identical_inputs) {
     std::vector<float> a(48000, 0.f), b(48000, 0.f);
-    addu94::music::render_click(a.data(), a.size(), 100, true, 0.5f, 48000.0);
-    addu94::music::render_click(b.data(), b.size(), 100, true, 0.5f, 48000.0);
+    ghost_story::music::render_click(a.data(), a.size(), 100, true, 0.5f, 48000.0);
+    ghost_story::music::render_click(b.data(), b.size(), 100, true, 0.5f, 48000.0);
     CHECK(a == b);
     // And different accents differ.
     std::vector<float> c(48000, 0.f);
-    addu94::music::render_click(c.data(), c.size(), 100, false, 0.5f, 48000.0);
+    ghost_story::music::render_click(c.data(), c.size(), 100, false, 0.5f, 48000.0);
     CHECK(a != c);
 }
 
 TEST(metronome, click_is_bounded_and_decays) {
     std::vector<float> buf(4800, 0.f);
-    addu94::music::render_click(buf.data(), buf.size(), 0, true, 1.0f, 48000.0);
+    ghost_story::music::render_click(buf.data(), buf.size(), 0, true, 1.0f, 48000.0);
     float peak = 0.f;
     for (float v : buf) {
         CHECK(std::abs(v) <= 1.0f);

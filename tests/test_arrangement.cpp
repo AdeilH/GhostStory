@@ -1,11 +1,11 @@
-// addu94 — tests/test_arrangement.cpp
+// ghost_story — tests/test_arrangement.cpp
 #include "test_framework.hpp"
 
 #include "project/arrangement.hpp"
 
 #include <memory>
 
-using namespace addu94::project;
+using namespace ghost_story::project;
 
 TEST(arrangement, song_length_is_max_block_end) {
     Timeline t;

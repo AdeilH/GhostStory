@@ -1,4 +1,4 @@
-// addu94 — src/mapping/actions.hpp
+// ghost_story — src/mapping/actions.hpp
 //
 // Actions: what a physical control DOES (spec §5). Bindings live in
 // per-project profile.toml; defaults are embedded (see mapping.hpp) and
@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-namespace addu94::mapping {
+namespace ghost_story::mapping {
 
 enum class Action : std::uint16_t {
     None = 0,
@@ -43,14 +43,15 @@ enum class Action : std::uint16_t {
     ModePlay,
     ModeEdit,
     ModeStep,
-    PadBankToggle, // pad bank A/B switch
-    ClipLaunch,    // pads bank B: param = clip index
+    ClipLaunch,    // future multi-clip grid: param = clip index
     ClipStop,
-    ChordSlot,     // pads bank B 3-8: chord memory; delta 0=press 1=release
+    ChordSlot,     // pads bank B 3-8 (EDIT): chord memory; 0=press 1=release
+    PadPackSelect, // pads in KIT (Step) mode: param = pack index 0..15
 
     // --- misc ---
     ArpToggle,
     ScaleLockToggle,
+    KeysPlayOnceToggle,  // keys: play once per press vs allow repeat fires
     OctaveUp,
     OctaveDown,
     TempoNudge,    // knob: param = delta
@@ -59,6 +60,18 @@ enum class Action : std::uint16_t {
     ClickLevel,
     ScrubCoarse,
     ScrubFine,
+
+    // --- KIT mode (sound-design knob page) ---
+    VelocityCurveSet,  // knob: 4 zones across the sweep -> velocity curve
+    KitGain,           // knob: sampler gain 0..2 across the kit
+    PadTune,           // knob: last-hit pad tuning, -12..+12 semitones
+    PadDecay,          // knob: last-hit pad decay scale 0.1..4.0
+
+    // --- FX (Edit-mode knob page; per selected track, drums included) ---
+    FxSelect,      // knob: param 0..127 picks one of 9 chain slots
+    FxToggle,      // press: on/off the selected slot
+    FxParamA,      // knob: slot-dependent param A (see PlayEngine::fx_slot_param_name)
+    FxParamB,      // knob: slot-dependent param B
 };
 
 [[nodiscard]] constexpr const char* to_string(Action a) noexcept {
@@ -87,12 +100,13 @@ enum class Action : std::uint16_t {
     case Action::ModePlay: return "mode.play";
     case Action::ModeEdit: return "mode.edit";
     case Action::ModeStep: return "mode.step";
-    case Action::PadBankToggle: return "pads.bank";
     case Action::ClipLaunch: return "clips.launch";
     case Action::ClipStop: return "clips.stop";
     case Action::ChordSlot: return "chords.slot";
+    case Action::PadPackSelect: return "pads.pack";
     case Action::ArpToggle: return "arp.toggle";
     case Action::ScaleLockToggle: return "keys.scale_lock";
+    case Action::KeysPlayOnceToggle: return "keys.play_once";
     case Action::OctaveUp: return "keys.octave_up";
     case Action::OctaveDown: return "keys.octave_down";
     case Action::TempoNudge: return "transport.tempo";
@@ -101,8 +115,16 @@ enum class Action : std::uint16_t {
     case Action::ClickLevel: return "transport.click_level";
     case Action::ScrubCoarse: return "transport.scrub_coarse";
     case Action::ScrubFine: return "transport.scrub_fine";
+    case Action::VelocityCurveSet: return "kit.velocity_curve";
+    case Action::KitGain: return "kit.gain";
+    case Action::PadTune: return "kit.pad_tune";
+    case Action::PadDecay: return "kit.pad_decay";
+    case Action::FxSelect: return "fx.select";
+    case Action::FxToggle: return "fx.toggle";
+    case Action::FxParamA: return "fx.param_a";
+    case Action::FxParamB: return "fx.param_b";
     }
     return "?";
 }
 
-}  // namespace addu94::mapping
+}  // namespace ghost_story::mapping

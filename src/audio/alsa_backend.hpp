@@ -1,4 +1,4 @@
-// addu94 — src/audio/alsa_backend.hpp
+// ghost_story — src/audio/alsa_backend.hpp
 //
 // ALSA PCM playback backend (spec §3, ADR 002) — the LAST-RESORT backend,
 // used only when neither PipeWire nor a JACK-compatible server is
@@ -27,13 +27,14 @@
 #include <alsa/asoundlib.h>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <thread>
 #include <vector>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 class AlsaBackend final : public AudioBackend {
 public:
@@ -70,6 +71,11 @@ public:
 private:
     /// Writer thread body: render → interleave → writei loop.
     void writer_loop() noexcept;
+    /// Capture thread body (live mic, when open() configured one):
+    /// snd_pcm_readi → convert → push into the capture ring. Blocking is
+    /// expected (same non-RT contract as the writer thread); any capture
+    /// failure ends the thread and the mic goes quiet — playback continues.
+    void capture_loop() noexcept;
     /// RT-ish timing/accounting helpers (writer thread only).
     void record_xrun() noexcept;
     void fire_state(StreamState s) noexcept;
@@ -77,6 +83,16 @@ private:
     void enter_error(char const* what, int err) noexcept;
 
     snd_pcm_t* pcm_{nullptr};
+
+    // Capture path (null / empty = playback-only).
+    snd_pcm_t* cap_pcm_{nullptr};
+    CaptureRing* capture_ring_{nullptr};
+    bool cap_s16_{false};  // device refused FLOAT_LE; convert in the loop
+    std::vector<Sample> cap_left_;
+    std::vector<Sample> cap_right_;
+    // Raw interleaved staging: worst case (2 ch × 4-byte float) per frame.
+    std::vector<std::byte> cap_raw_;
+    std::uint32_t cap_frames_{0};
 
     // Preallocated in open() — period_frames_ floats each.
     std::vector<Sample> left_;
@@ -102,9 +118,10 @@ private:
     Stats stats_{};
 
     std::thread writer_;
+    std::thread capturer_;
     std::atomic<bool> running_{false};
     std::atomic<bool> stop_{false};
     std::atomic<bool> error_{false};
 };
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

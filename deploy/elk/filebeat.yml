@@ -1,0 +1,73 @@
+# Ghost Story log shipper (dev stack). Tails the app's JSONL log and the
+# watchdog incidents file from the host data dir (mounted read-only at
+# /data) into the Elasticsearch indices created by scripts/elk_setup.sh.
+#
+# The app JSONL (schema v2) already carries @timestamp in ISO-8601 UTC, so
+# ndjson parsing alone is enough — no timestamp conversion here.
+
+filebeat.inputs:
+  - type: filestream
+    id: ghost-story-app-log
+    enabled: true
+    paths:
+      - /data/logs/app.jsonl
+    parsers:
+      # A SIGKILL mid-append can leave a torn final line; keep parsing the
+      # rest of the file and drop the malformed event.
+      - ndjson:
+          error_key: json_parse_error
+    processors:
+      - drop_event:
+          when:
+            has_fields: ["json_parse_error"]
+
+  - type: filestream
+    id: ghost-story-incidents
+    enabled: true
+    paths:
+      - /data/incidents.jsonl
+    parsers:
+      - ndjson:
+          error_key: json_parse_error
+    processors:
+      - drop_event:
+          when:
+            has_fields: ["json_parse_error"]
+
+  - type: filestream
+    id: ghost-story-telemetry
+    enabled: true
+    paths:
+      - /data/telemetry/sessions.jsonl
+    parsers:
+      - ndjson:
+          error_key: json_parse_error
+    processors:
+      - drop_event:
+          when:
+            has_fields: ["json_parse_error"]
+
+# Index routing by source file → the indices managed by elk_setup.sh
+# (mappings + 30-day ILM delete live on the Elasticsearch side).
+# filestream exposes the source as log.file.path (no log.file.name in 9.x).
+output.elasticsearch:
+  hosts: ["${ES_URL}"]
+  indices:
+    - index: "logs-ghost_story-app"
+      when:
+        contains:
+          log.file.path: "app.jsonl"
+    - index: "logs-ghost_story-incidents"
+      when:
+        contains:
+          log.file.path: "incidents.jsonl"
+    - index: "logs-ghost_story-telemetry"
+      when:
+        contains:
+          log.file.path: "sessions.jsonl"
+
+# Template and ILM are owned by scripts/elk_setup.sh, not by the shipper.
+setup.template.enabled: false
+setup.ilm.enabled: false
+
+logging.level: warning

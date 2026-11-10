@@ -1,4 +1,4 @@
-// addu94 — src/project/document.hpp
+// ghost_story — src/project/document.hpp
 //
 // Project document (spec §2/§8): the song. Serializable to checksummed,
 // versioned JSON; edits go through the journal (journal.hpp) so a crash
@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::project {
+namespace ghost_story::project {
 
 struct Track {
     std::string name{"Track"};
@@ -58,4 +58,4 @@ struct Project {
 [[nodiscard]] bool project_from_json(std::string const& json, Project& out,
                                      std::string& error);
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

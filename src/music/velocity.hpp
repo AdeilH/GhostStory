@@ -1,4 +1,4 @@
-// addu94 — src/music/velocity.hpp
+// ghost_story — src/music/velocity.hpp
 //
 // Velocity curves (spec §4): mini keys under-report low velocities, so the
 // default curve is NOT linear. Curves are pure functions — RT-safe, no
@@ -9,7 +9,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace addu94::music {
+namespace ghost_story::music {
 
 enum class VelocityCurve : std::uint8_t {
     Linear = 0,
@@ -50,4 +50,4 @@ enum class VelocityCurve : std::uint8_t {
     return "?";
 }
 
-}  // namespace addu94::music
+}  // namespace ghost_story::music

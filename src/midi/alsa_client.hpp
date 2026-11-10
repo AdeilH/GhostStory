@@ -1,4 +1,4 @@
-// addu94 — src/midi/alsa_client.hpp
+// ghost_story — src/midi/alsa_client.hpp
 //
 // ALSA sequencer client: dedicated realtime-ish input thread feeding events
 // to a sink through the RT contract (no locks, no allocation on the input
@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-namespace addu94::midi {
+namespace ghost_story::midi {
 
 /// Discovered ALSA port (an input-capable port of a device/client).
 struct PortRef {
@@ -136,4 +136,4 @@ private:
 /// Returns "" when the port is not a recognised MPK.
 [[nodiscard]] std::string_view mpk_model_from_name(std::string_view client_name);
 
-}  // namespace addu94::midi
+}  // namespace ghost_story::midi

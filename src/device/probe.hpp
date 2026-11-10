@@ -1,4 +1,4 @@
-// addu94 — src/device/probe.hpp
+// ghost_story — src/device/probe.hpp
 //
 // Runtime device probe (spec §1): enumerate ALSA ports, match MPK variants,
 // send MIDI Identity Request, capture raw traffic (60 s window or
@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::device {
+namespace ghost_story::device {
 
 struct ProbeResult {
     bool device_found{false};
@@ -34,7 +34,7 @@ struct CaptureRecord {
 class Probe {
 public:
     /// Run a probe. `capture_seconds` > 0 also records raw traffic for that
-    /// window (`addu94 probe --capture`). Blocking; safe on control thread.
+    /// window (`ghost_story probe --capture`). Blocking; safe on control thread.
     ProbeResult run(int capture_seconds = 0);
 
     /// Convenience: scan-only (no capture), used by tests.
@@ -49,4 +49,4 @@ private:
     std::vector<CaptureRecord> captured_;
 };
 
-}  // namespace addu94::device
+}  // namespace ghost_story::device

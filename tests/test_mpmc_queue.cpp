@@ -1,4 +1,4 @@
-// addu94 — tests/test_mpmc_queue.cpp
+// ghost_story — tests/test_mpmc_queue.cpp
 // Correctness + concurrency tests for the multi-producer queue.
 // TSan target in CI: 4 producers × 1 consumer, sequenced delivery.
 #include "test_framework.hpp"
@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-using addu94::core::MpmcQueue;
+using ghost_story::core::MpmcQueue;
 
 namespace {
 struct Msg {

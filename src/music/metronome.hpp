@@ -1,4 +1,4 @@
-// addu94 — src/music/metronome.hpp
+// ghost_story — src/music/metronome.hpp
 //
 // Deterministic click generator (RT-safe): pure function of (sample rate,
 // accent, phase). No state, no allocation — the audio callback asks the
@@ -8,7 +8,7 @@
 #include <cmath>
 #include <cstddef>
 
-namespace addu94::music {
+namespace ghost_story::music {
 
 /// Render one metronome click starting at sample `offset` of the buffer.
 /// Sound: short sine ping (accent 1900 Hz, beat 1270 Hz) with exp decay.
@@ -31,4 +31,4 @@ inline void render_click(float* buf, std::size_t frames, std::size_t offset,
     }
 }
 
-}  // namespace addu94::music
+}  // namespace ghost_story::music

@@ -1,0 +1,6 @@
+{
+  "project_id": "ghost_story",
+  "service": "http://127.0.0.1:7900",
+  "user": "local",
+  "version": 1
+}

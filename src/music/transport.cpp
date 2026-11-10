@@ -1,9 +1,9 @@
-// addu94 — src/music/transport.cpp
+// ghost_story — src/music/transport.cpp
 #include "music/transport.hpp"
 
 #include <cmath>
 
-namespace addu94::music {
+namespace ghost_story::music {
 
 Transport::Transport(TransportControl& ctrl) noexcept : ctrl_(ctrl) {}
 
@@ -54,12 +54,20 @@ void Transport::apply_state_requests() noexcept {
             state_ = PlayState::Recording;
         }
         break;
+    case TransportControl::kReqPositionSet:
+        // Seek, stopped or rolling — sample-exact on the RT thread.
+        pos_ = ctrl_.position_req.load(std::memory_order_acquire);
+        break;
     default: break;
     }
 }
 
 void Transport::advance(std::uint32_t frames) noexcept {
     apply_state_requests();
+    // Publish the (possibly just-requested) state for the master hook's
+    // clip scheduling — see TransportControl::play_state.
+    ctrl_.play_state.store(static_cast<std::uint8_t>(state_),
+                           std::memory_order_relaxed);
     if (state_ == PlayState::Stopped) return;
     latch();
     pos_ += frames;
@@ -71,7 +79,13 @@ void Transport::advance(std::uint32_t frames) noexcept {
 void Transport::start() noexcept {
     latch();
     if (state_ == PlayState::Stopped) {
-        pos_ = 0;  // start from top; punch-in/overdub keeps position (M3)
+        // Start from the playhead (the app thread keeps start_position in
+        // sync with every position request) — punch-in/overdub keeps the
+        // rolling position (M3).
+        pos_ = ctrl_.start_position.load(std::memory_order_acquire);
+        if (loop_samples_ != 0 && pos_ >= loop_samples_) {
+            pos_ %= loop_samples_;
+        }
     }
     state_ = PlayState::Playing;
 }
@@ -149,4 +163,4 @@ int Transport::clicks_in(std::uint32_t frames, Click* out,
     return n;
 }
 
-}  // namespace addu94::music
+}  // namespace ghost_story::music

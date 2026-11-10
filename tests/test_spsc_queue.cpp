@@ -1,4 +1,4 @@
-// addu94 — tests/test_spsc_queue.cpp
+// ghost_story — tests/test_spsc_queue.cpp
 // Correctness + concurrency tests for the foundational RT primitive.
 // The multithreaded test is also run under TSan in CI (see scripts/ci.sh).
 #include "test_framework.hpp"
@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector>
 
-using addu94::core::SpscQueue;
+using ghost_story::core::SpscQueue;
 
 namespace {
 

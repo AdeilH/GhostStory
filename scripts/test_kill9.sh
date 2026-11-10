@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# addu94 — scripts/test_kill9.sh
+# ghost_story — scripts/test_kill9.sh
 # Spec §6.3 gate: kill -9 mid-recording must lose at most ~1 s of edits
 # and the engine must relaunch cleanly over the dirty journal.
 # End-to-end: notes flow through event queue → recorder → journal (fsync
@@ -7,8 +7,8 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN="$ROOT/build/main/addu94"
-DIR=$(mktemp -d /tmp/addu94_kill9.XXXXXX)
+BIN="$ROOT/build/main/ghost_story"
+DIR=$(mktemp -d /tmp/ghost_story_kill9.XXXXXX)
 SMF="$DIR/out.mid"
 trap 'rm -rf "$DIR"' EXIT
 

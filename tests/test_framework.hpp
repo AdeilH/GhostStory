@@ -1,4 +1,4 @@
-// addu94 — tests/test_framework.hpp
+// ghost_story — tests/test_framework.hpp
 //
 // Minimal dependency-free test framework. No external deps by design:
 // CI runs offline. Each .cpp registers tests via static constructors;
@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-namespace addu94::test {
+namespace ghost_story::test {
 
 // Describe a value for failure messages: anything with operator<<, else "?".
 template <typename T>
@@ -58,44 +58,44 @@ inline void report_failure(char const* file, int line, std::string const& msg) {
     std::fprintf(stderr, "  FAIL %s:%d  %s\n", file, line, msg.c_str());
 }
 
-#define A94_CONCAT_INNER(a, b) a##b
-#define A94_CONCAT(a, b) A94_CONCAT_INNER(a, b)
+#define GS_CONCAT_INNER(a, b) a##b
+#define GS_CONCAT(a, b) GS_CONCAT_INNER(a, b)
 
 #define TEST(suite, name)                                                     \
-    static void A94_CONCAT(a94_test_, __LINE__)();                            \
-    static ::addu94::test::Registrar A94_CONCAT(a94_reg_, __LINE__)(          \
-        #suite "." #name, &A94_CONCAT(a94_test_, __LINE__));                  \
-    static void A94_CONCAT(a94_test_, __LINE__)()
+    static void GS_CONCAT(gs_test_, __LINE__)();                            \
+    static ::ghost_story::test::Registrar GS_CONCAT(gs_reg_, __LINE__)(          \
+        #suite "." #name, &GS_CONCAT(gs_test_, __LINE__));                  \
+    static void GS_CONCAT(gs_test_, __LINE__)()
 
 #define CHECK(cond)                                                           \
     do {                                                                      \
         if (!(cond))                                                          \
-            ::addu94::test::report_failure(__FILE__, __LINE__, #cond);        \
+            ::ghost_story::test::report_failure(__FILE__, __LINE__, #cond);        \
     } while (0)
 
 #define CHECK_EQ(a, b)                                                        \
     do {                                                                      \
-        auto a94_va_ = (a);  /* copy: may reference a temporary's element */  \
-        auto a94_vb_ = (b);                                                   \
-        if (!(a94_va_ == a94_vb_)) {                                          \
-            ::addu94::test::report_failure(                                   \
+        auto gs_va_ = (a);  /* copy: may reference a temporary's element */  \
+        auto gs_vb_ = (b);                                                   \
+        if (!(gs_va_ == gs_vb_)) {                                          \
+            ::ghost_story::test::report_failure(                                   \
                 __FILE__, __LINE__,                                           \
                 std::string(#a) + " == " + #b + "  (got " +                   \
-                    ::addu94::test::describe(a94_va_) + " vs " +              \
-                    ::addu94::test::describe(a94_vb_) + ")");                 \
+                    ::ghost_story::test::describe(gs_va_) + " vs " +              \
+                    ::ghost_story::test::describe(gs_vb_) + ")");                 \
         }                                                                     \
     } while (0)
 
 #define CHECK_NEAR(a, b, tol)                                                 \
     do {                                                                      \
-        double const a94_va_ = static_cast<double>(a);                        \
-        double const a94_vb_ = static_cast<double>(b);                        \
-        if (!(std::abs(a94_va_ - a94_vb_) <= (tol))) {                        \
-            ::addu94::test::report_failure(                                   \
+        double const gs_va_ = static_cast<double>(a);                        \
+        double const gs_vb_ = static_cast<double>(b);                        \
+        if (!(std::abs(gs_va_ - gs_vb_) <= (tol))) {                        \
+            ::ghost_story::test::report_failure(                                   \
                 __FILE__, __LINE__,                                           \
                 std::string(#a) + " ~= " + #b + "  (" +                       \
-                    std::to_string(a94_va_) + " vs " +                        \
-                    std::to_string(a94_vb_) + ", tol " +                      \
+                    std::to_string(gs_va_) + " vs " +                        \
+                    std::to_string(gs_vb_) + ", tol " +                      \
                     std::to_string(tol) + ")");                               \
         }                                                                     \
     } while (0)
@@ -122,7 +122,7 @@ inline int run_all(std::string_view binary_name) {
     return 0;
 }
 
-}  // namespace addu94::test
+}  // namespace ghost_story::test
 
 #define TEST_MAIN()                                                           \
-    int main() { return ::addu94::test::run_all("addu94-tests"); }
+    int main() { return ::ghost_story::test::run_all("ghost_story-tests"); }

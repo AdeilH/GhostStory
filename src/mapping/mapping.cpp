@@ -1,4 +1,4 @@
-// addu94 — src/mapping/mapping.cpp
+// ghost_story — src/mapping/mapping.cpp
 #include "mapping/mapping.hpp"
 
 #include "core/toml_min.hpp"
@@ -6,17 +6,17 @@
 
 #include <algorithm>
 
-namespace addu94::mapping {
+namespace ghost_story::mapping {
 
 // Default profile (spec §5 mode layout). Knob/pad numbers are 1-based here
 // for user readability; internals are 0-based.
 std::string const& default_profile_toml() {
-    static std::string const kDefault = R"(# addu94 default profile — all bindings remappable per project.
+    static std::string const kDefault = R"(# ghost_story default profile — all bindings remappable per project.
 # knob.N.cc: CC number of hardware knob N. The defaults below are knob
 # positions 1..8 of the FIRST stock MPK knob set (CC 1..8). The mapping
 # engine ALSO recognizes the other stock sets by position: CC 21..28 and
 # CC 70..77 (mk2/mk3 factory programs ship these). A `knobs.N.cc` entry
-# here OVERRIDES the alias sets for that knob — run `addu94 calibrate` to
+# here OVERRIDES the alias sets for that knob — run `ghost_story calibrate` to
 # generate one from your actual hardware.
 
 [knobs]
@@ -30,10 +30,14 @@ std::string const& default_profile_toml() {
 8.cc = 8    # env release
 
 [pads]
-# PLAY: 36..43 = drum pads (8 distinct kit sounds), 44/45 = undo/redo,
-# 46..51 = chord memory slots (tap = play chord, hold + keys = capture).
-# EDIT: 36..43 = track select. No two-pad chords: drumming must never
-# accidentally erase a take (the old A1+A2 Undo chord did exactly that).
+# PLAY: all 16 pads fire the drum kit — 36..43 are the 8 kit sounds,
+# 44..51 the same sounds one octave up. No utility pads in PLAY, so
+# drumming can never fire Undo.
+# EDIT: 36..43 = track select, 44/45 = undo/redo, 46..51 = chord memory
+# slots (tap = play chord, hold + keys = capture).
+# KIT (the Step mode): every pad selects one of the 16 built-in packs
+# and auditions its voice. No two-pad chords: drumming must never
+# accidentally erase a take.
 a.note = 36
 b.note = 44
 )";
@@ -75,10 +79,7 @@ bool MappingEngine::load_profile(std::string const& toml_text,
 }
 
 void MappingEngine::set_mode(Mode m) noexcept {
-    if (mode_ != m) {
-        mode_ = m;
-        pad_bank_b_ = false;
-    }
+    mode_ = m;
 }
 
 std::vector<Command> MappingEngine::consume(midi::MidiEvent const& ev) {
@@ -109,6 +110,56 @@ int MappingEngine::knob_alias_index(std::uint8_t cc) noexcept {
     return -1;
 }
 
+// Per-mode knob bindings, in knob order 1..8. ONE table pair serves both
+// consumers: map_cc (hardware CCs) and ControllerMirror (interactive
+// on-screen knobs) — plus knob_label for the text under each arc, which
+// previously lived in the UI and had to be kept in sync by hand.
+namespace {
+
+Action const kPlayKnobActions[8] = {
+    Action::TrackVolume,      Action::TrackPan,     Action::TrackSend,
+    Action::InstrumentMacro1, Action::FilterCutoff, Action::FilterReso,
+    Action::EnvAttack,        Action::EnvRelease};
+char const* const kPlayKnobLabels[8] = {
+    "vol", "pan", "send", "macro", "cut", "res", "atk", "rel"};
+
+Action const kEditKnobActions[8] = {
+    Action::FxSelect,    Action::FxToggle,         Action::FxParamA,
+    Action::FxParamB,    Action::TempoNudge,       Action::LoopBarsSet,
+    Action::QuantizeGridSet, Action::MasterVolume};
+char const* const kEditKnobLabels[8] = {
+    "fx.sel", "fx.on", "fx.A", "fx.B", "tempo", "loop", "quant", "master"};
+
+// KIT = the sound-design page. Knobs 5..7 are deliberate no-ops for now.
+Action const kKitKnobActions[8] = {
+    Action::VelocityCurveSet, Action::KitGain, Action::PadTune,
+    Action::PadDecay,         Action::None,    Action::None,
+    Action::None,             Action::MasterVolume};
+char const* const kKitKnobLabels[8] = {
+    "curve", "gain", "tune", "decay", "-", "-", "-", "master"};
+
+}  // namespace
+
+Action MappingEngine::knob_action(Mode mode, int idx) noexcept {
+    if (idx < 0 || idx >= 8) return Action::None;
+    switch (mode) {
+    case Mode::Play: return kPlayKnobActions[static_cast<std::size_t>(idx)];
+    case Mode::Edit: return kEditKnobActions[static_cast<std::size_t>(idx)];
+    case Mode::Step: return kKitKnobActions[static_cast<std::size_t>(idx)];
+    }
+    return Action::None;
+}
+
+char const* MappingEngine::knob_label(Mode mode, int idx) noexcept {
+    if (idx < 0 || idx >= 8) return nullptr;
+    switch (mode) {
+    case Mode::Play: return kPlayKnobLabels[static_cast<std::size_t>(idx)];
+    case Mode::Edit: return kEditKnobLabels[static_cast<std::size_t>(idx)];
+    case Mode::Step: return kKitKnobLabels[static_cast<std::size_t>(idx)];
+    }
+    return nullptr;
+}
+
 std::vector<Command> MappingEngine::map_cc(std::uint8_t cc, std::uint8_t val) {
     std::vector<Command> out;
     // Find knob index by CC: an explicit profile entry wins, then the stock
@@ -126,22 +177,15 @@ std::vector<Command> MappingEngine::map_cc(std::uint8_t cc, std::uint8_t val) {
         knob_values_[static_cast<std::size_t>(idx)] = val;
         Command c;
         c.param = val;
-        if (mode_ == Mode::Play) {
-            static Action const play_actions[8] = {
-                Action::TrackVolume,  Action::TrackPan,    Action::TrackSend,
-                Action::InstrumentMacro1, Action::FilterCutoff,
-                Action::FilterReso,   Action::EnvAttack,   Action::EnvRelease};
-            c.action = play_actions[idx];
-        } else if (mode_ == Mode::Edit) {
-            static Action const edit_actions[8] = {
-                Action::ScrubCoarse, Action::ScrubFine, Action::TempoNudge,
-                Action::LoopBarsSet, Action::QuantizeGridSet,
-                Action::MasterVolume, Action::ClickLevel, Action::None};
-            c.action = edit_actions[idx];
-        } else {  // Step
-            // Knob 1 = selected step velocity; others no-op in M3.
-            c.action = idx == 0 ? Action::None : Action::None;
-        }
+        // Play = the mix page (volume/pan/send + the selected track's
+        // instrument). Edit = the FX page: knobs 1-4 drive the selected FX
+        // slot (select / toggle / param A / param B — see PlayEngine
+        // fx_slot_param_name for the per-slot meanings), knobs 5-8 keep the
+        // transport controls. KIT = the sound-design page (velocity curve,
+        // kit gain, last-pad tune/decay, master). The old scrub knobs were
+        // stored-only (no transport position control exists) and click
+        // level lives on the transport-bar slider.
+        c.action = knob_action(mode_, idx);
         out.push_back(c);
         return out;
     }
@@ -153,7 +197,7 @@ std::vector<Command> MappingEngine::map_cc(std::uint8_t cc, std::uint8_t val) {
     if (cc != 64 && !logged[cc]) {
         logged[cc] = true;
         log::info("mapping",
-                  "unmapped CC {}={} — run `addu94 calibrate` or add "
+                  "unmapped CC {}={} — run `ghost_story calibrate` or add "
                   "knobs.N.cc to profile.toml",
                   cc, val);
     }
@@ -161,16 +205,23 @@ std::vector<Command> MappingEngine::map_cc(std::uint8_t cc, std::uint8_t val) {
 }
 
 std::vector<Command> MappingEngine::map_note(int note, bool on) {
-    // FIX (user report: "pad 1 and pad 2 have same response"): the old
-    // scheme made A1+A2 the Undo chord — drumming A1-then-A2 erased takes,
-    // and ChordSlot/ClipLaunch were never implemented so pads had no
-    // distinct responses. New PLAY-mode semantics, all immediate and
-    // distinct (bank determined by note range, no bank toggle needed):
-    //   36..43  drum pads      -> DrumPad (sound via RT path, distinct hit)
-    //   44      Undo           (press, instant)
-    //   45      Redo           (press, instant)
-    //   46..51  chord slots 0..5 (press/release pairs; hold + keys = capture)
-    // EDIT mode: 36..43 selects tracks (press); 44/45 undo/redo still work.
+    // Pad semantics v2 (user report, round 2: "BANK B doesn't work at all"
+    // + "no other pack on pad working"): v0.1.3 gave bank B to utilities
+    // and chord slots, which left a drummer's bank B SILENT — the pads'
+    // primary job in PLAY is making sound. Per mode:
+    //
+    // PLAY  — a pure drum machine: ALL 16 pads fire the kit. 36..43
+    //         natural, 44..51 the same sounds +12 (Sampler pad mapping).
+    //         No utility pads here, so drumming can never fire Undo —
+    //         stronger than the v0.1.3 "no accidental undo" guarantee.
+    //         Param = absolute pad index 0..15 (mirror pulse).
+    // EDIT  — bank A selects the track the keys play (press); bank B:
+    //         44/45 undo/redo, 46..51 chord slots 0..5 (press/release
+    //         pairs; hold + keys = capture). Pads don't drum in EDIT —
+    //         chord capture stays quiet.
+    // KIT (Step) — the pack browser: every pad 36..51 selects that pack
+    //         (0..15) and PlayEngine auditions its voice, so "no other
+    //         pack on pad" can't happen: the kit is ON the pads.
     std::vector<Command> out;
     if (note < 36 || note > 51) return out;
 
@@ -178,29 +229,33 @@ std::vector<Command> MappingEngine::map_note(int note, bool on) {
         out.push_back(Command{a, param, delta});
     };
 
-    if (note <= 43) {  // bank A: drum pads / track select
-        int const pad = note - 36;
+    if (mode_ == Mode::Play) {
+        if (on) push(Action::DrumPad, note - 36, 0);
+        return out;
+    }
+
+    if (note <= 43) {  // bank A: track select (EDIT) / pack select (KIT)
         if (mode_ == Mode::Edit) {
-            if (on) push(Action::TrackSelect, pad, 0);
-        } else if (mode_ == Mode::Step) {
-            // step grid: pattern editor (M-later); mirror pulse only
-            if (on) push(Action::None, pad, 0);
-        } else {
-            if (on) push(Action::DrumPad, pad, 0);
+            if (on) push(Action::TrackSelect, note - 36, 0);
+        } else {  // KIT
+            if (on) push(Action::PadPackSelect, note - 36, 0);
         }
         return out;
     }
 
-    // Bank B: utilities + chord memory.
-    if (note == 44 || note == 45) {
-        if (on) push(note == 44 ? Action::Undo : Action::Redo, 0, 0);
-        return out;
-    }
-    int const slot = note - 46;  // 0..5
-    if (mode_ == Mode::Play) {
-        push(Action::ChordSlot, slot, on ? 0 : 1);
+    // Bank B 44..51.
+    if (mode_ == Mode::Edit) {
+        if (note == 44 || note == 45) {
+            if (on) push(note == 44 ? Action::Undo : Action::Redo, 0, 0);
+        } else {
+            // Chord slots 0..5: press/release pairs so the engine can
+            // sound the chord on press and stop it on release.
+            push(Action::ChordSlot, note - 46, on ? 0 : 1);
+        }
+    } else {  // KIT: packs 8..15 on bank B
+        if (on) push(Action::PadPackSelect, note - 36, 0);
     }
     return out;
 }
 
-}  // namespace addu94::mapping
+}  // namespace ghost_story::mapping

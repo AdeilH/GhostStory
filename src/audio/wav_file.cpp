@@ -1,4 +1,4 @@
-// addu94 — src/audio/wav_file.cpp
+// ghost_story — src/audio/wav_file.cpp
 //
 // RIFF/WAVE parser + writer implementing wav_file.hpp.
 //
@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 namespace {
 
 constexpr std::uint64_t kMaxWavBytes = std::uint64_t{512} << 20;  // 512 MB
@@ -317,4 +317,4 @@ bool wav_save(std::string const& path, WavData const& data, std::string& error) 
     return ok;
 }
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

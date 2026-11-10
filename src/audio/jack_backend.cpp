@@ -1,13 +1,14 @@
-// addu94 — src/audio/jack_backend.cpp
+// ghost_story — src/audio/jack_backend.cpp
 #include "audio/jack_backend.hpp"
 
+#include "audio/capture_ring.hpp"
 #include "log/logger.hpp"
 
 #include <cerrno>
 #include <cstring>
 #include <ctime>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 namespace {
 
@@ -42,7 +43,7 @@ bool JackBackend::available() const noexcept {
     // (would have failed to link / dlopen) and when no server is running.
     jack_status_t status = static_cast<jack_status_t>(0);
     jack_client_t* probe =
-        jack_client_open("addu94-probe", JackNoStartServer, &status);
+        jack_client_open("ghost_story-probe", JackNoStartServer, &status);
     if (probe == nullptr) return false;
     jack_client_close(probe);
     return true;
@@ -56,7 +57,7 @@ bool JackBackend::open(BackendConfig const& cfg, std::string& reason) {
     // On this machine PipeWire exposes a JACK-compatible server via
     // pipewire-jack, so this connects live; without one it fails cleanly.
     jack_client_t* client =
-        jack_client_open("addu94", JackNoStartServer, &status);
+        jack_client_open("ghost_story", JackNoStartServer, &status);
     if (client == nullptr) {
         reason = "jack_client_open failed (status=0x" +
                  std::to_string(static_cast<unsigned>(status)) +
@@ -96,6 +97,25 @@ bool JackBackend::open(BackendConfig const& cfg, std::string& reason) {
     client_ = client;
     port_l_ = port_l;
     port_r_ = port_r;
+    capture_ring_ = cfg.capture_ring;
+    in_l_ = nullptr;
+    in_r_ = nullptr;
+    if (capture_ring_ != nullptr) {
+        // Live mic: two input ports. Registration failure downgrades to
+        // playback-only (a warning, never fatal — the mixer must play).
+        in_l_ = jack_port_register(client, "in_L", JACK_DEFAULT_AUDIO_TYPE,
+                                   JackPortIsInput, 0);
+        in_r_ = jack_port_register(client, "in_R", JACK_DEFAULT_AUDIO_TYPE,
+                                   JackPortIsInput, 0);
+        if (in_l_ == nullptr || in_r_ == nullptr) {
+            log::warn("audio",
+                      "jack: input port registration failed — capture "
+                      "disabled (playback continues)");
+            in_l_ = nullptr;
+            in_r_ = nullptr;
+            capture_ring_ = nullptr;
+        }
+    }
     shutdown_seen_.store(false, std::memory_order_relaxed);
     activated_.store(false, std::memory_order_relaxed);
     running_.store(false, std::memory_order_relaxed);
@@ -120,6 +140,9 @@ void JackBackend::close() noexcept {
     client_ = nullptr;
     port_l_ = nullptr;
     port_r_ = nullptr;
+    in_l_ = nullptr;
+    in_r_ = nullptr;
+    capture_ring_ = nullptr;
     running_.store(false, std::memory_order_release);
 }
 
@@ -159,6 +182,9 @@ bool JackBackend::start() {
     // session graph may not have system playback ports (or a patchbay may
     // want to route us manually).
     connect_playback_ports();
+    if (in_l_ != nullptr && in_r_ != nullptr) {
+        connect_capture_ports();
+    }
 
     log::info("audio", "jack backend running: rate={} buffer={}",
               stats_.sample_rate.load(std::memory_order_relaxed),
@@ -187,6 +213,8 @@ CallbackStats JackBackend::stats() const noexcept {
 }
 
 int JackBackend::process_thunk(jack_nframes_t nframes, void* arg) noexcept {
+    // JACK owns this thread — label it so its log lines show "audio".
+    ghost_story::log::Logger::set_thread_name("audio");
     return static_cast<JackBackend*>(arg)->handle_process(nframes);
 }
 
@@ -201,6 +229,19 @@ int JackBackend::handle_process(jack_nframes_t nframes) noexcept {
         // count as an xrun, keep the callback return value non-fatal.
         record_xrun();
         return 0;
+    }
+
+    // Live input: push the capture port buffers into the ring BEFORE the
+    // render call (the mixer consumes them in the same graph cycle — input
+    // and output move in lockstep, which keeps mic latency at one buffer).
+    if (in_l_ != nullptr && in_r_ != nullptr) {
+        auto* in_left =
+            static_cast<Sample*>(jack_port_get_buffer(in_l_, nframes));
+        auto* in_right =
+            static_cast<Sample*>(jack_port_get_buffer(in_r_, nframes));
+        if (in_left != nullptr && in_right != nullptr) {
+            capture_ring_->push(in_left, in_right, nframes);
+        }
     }
 
     RenderFn const render = render_fn_.load(std::memory_order_relaxed);
@@ -314,4 +355,47 @@ void JackBackend::connect_playback_ports() noexcept {
     }
 }
 
-}  // namespace addu94::audio
+void JackBackend::connect_capture_ports() noexcept {
+    if (in_l_ == nullptr || in_r_ == nullptr) return;
+    char const* dst_l = jack_port_name(in_l_);
+    char const* dst_r = jack_port_name(in_r_);
+
+    // Fast path: the standard system capture ports.
+    if (jack_connect(client_, "system:capture_1", dst_l) == 0 &&
+        jack_connect(client_, "system:capture_2", dst_r) == 0) {
+        log::info("audio", "jack capture: system:capture_1/2 -> {} / {}",
+                  dst_l, dst_r);
+        return;
+    }
+    // Fallback: the first physical output ports we can find (a capture
+    // device with a single mono mic still lights up the mic panel).
+    char const** ports = jack_get_ports(
+        client_, nullptr, JACK_DEFAULT_AUDIO_TYPE,
+        static_cast<JackPortFlags>(JackPortIsPhysical | JackPortIsOutput));
+    if (ports == nullptr) {
+        log::warn("audio",
+                  "jack capture: no system capture ports found — mic stays "
+                  "unconnected (route a source to {} manually)",
+                  dst_l);
+        return;
+    }
+    std::size_t connected = 0;
+    for (char const** p = ports; *p != nullptr && connected < 2; ++p) {
+        char const* src = *p;
+        int const rc = jack_connect(client_, src,
+                                    connected == 0 ? dst_l : dst_r);
+        if (rc == 0 || rc == EEXIST) {
+            ++connected;
+        }
+    }
+    jack_free(ports);
+    if (connected > 0) {
+        log::info("audio", "jack capture: {} physical source(s) connected",
+                  connected);
+    } else {
+        log::warn("audio",
+                  "jack capture: no capture source connected (non-fatal)");
+    }
+}
+
+}  // namespace ghost_story::audio

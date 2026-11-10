@@ -1,4 +1,4 @@
-// addu94 — src/ops/doctor.cpp
+// ghost_story — src/ops/doctor.cpp
 #include "ops/doctor.hpp"
 
 #include "audio/backend.hpp"
@@ -13,7 +13,7 @@
 #include <filesystem>
 #include <fstream>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 namespace fs = std::filesystem;
 
@@ -50,7 +50,7 @@ Check manifest_check() {
     std::error_code ec;
     if (!fs::exists(path, ec)) {
         return {"device manifest", CheckStatus::Warn,
-                "missing — run `addu94 probe`"};
+                "missing — run `ghost_story probe`"};
     }
     auto m = device::load_manifest(path);
     if (!m) {
@@ -65,7 +65,7 @@ Check manifest_check() {
         static_cast<long long>(m->probed_at_ns) / 3600000LL;
     if (age_days > 24 * 7) {
         return {"device manifest", CheckStatus::Warn,
-                "stale (>7 days) — re-run `addu94 probe`"};
+                "stale (>7 days) — re-run `ghost_story probe`"};
     }
     return {"device manifest", CheckStatus::Pass,
             "model=" + (m->model.empty() ? "generic" : m->model)};
@@ -105,7 +105,7 @@ Check realtime_limits_check() {
     }
     return {"realtime limits", CheckStatus::Warn,
             "RT bandwidth throttled (" + std::to_string(rt_runtime) +
-                " µs/s) — audio threads still OK, addu94 uses normal "
+                " µs/s) — audio threads still OK, Ghost Story uses normal "
                 "scheduling for MIDI"};
 }
 
@@ -219,4 +219,4 @@ DoctorReport run_repair() {
     return rep;
 }
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=addu94
+Name=Ghost Story
 GenericName=Song Builder
 Comment=Self-healing song builder for the Akai MPK Mini on Linux
-Exec=addu94 play
-Icon=addu94
+Exec=ghost_story play
+Icon=ghost_story
 Terminal=false
 Categories=AudioVideo;Audio;Midi;
 Keywords=midi;mpk;akai;synth;sequencer;music;

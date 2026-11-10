@@ -1,4 +1,4 @@
-// addu94 — src/audio/synth.hpp
+// ghost_story — src/audio/synth.hpp
 //
 // Subtractive synth (spec §4.2): 2 oscillators + unison, ADSR, SVF filter
 // (12/24 dB, LP/HP/BP), LFO routable to filter/pitch/amp. ONE header-defined
@@ -14,7 +14,7 @@
 #include <array>
 #include <cstdint>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 inline constexpr int kMaxVoices = 64;
 
@@ -40,11 +40,28 @@ struct SynthParams {
     float cutoff_base_hz{1200.f};   // 20..18000
     float cutoff_keytrack{0.3f};    // 0..1 (follows note)
     float resonance{0.7f};          // 0.5..~10 (Q)
+    float velocity_filter{0.f};     // 0..1: velocity opens the cutoff
+                                    // (±velocity_filter octaves around the
+                                    // 0.5-velocity unity point)
 
-    // LFO
+    // Mono / glide (bass & lead essentials). In mono_legato mode a channel
+    // owns ONE voice: a new note while a voice sounds retargets it (envelope
+    // keeps running — legato) and, with glide_seconds > 0, glides the pitch
+    // exponentially from the running pitch to the new note over that time.
+    // Glide is only active in mono mode (predictable poly behavior).
+    bool mono_legato{false};
+    float glide_seconds{0.f};       // 0 = off, 0.001..2
+
+    // LFO (routable: filter cutoff / pitch vibrato / amp tremolo)
     LfoTarget lfo_target{LfoTarget::Off};
     float lfo_rate_hz{5.0f};        // 0.05..20
     float lfo_depth{0.2f};          // amount
+
+    // Second LFO (same targets; both apply when routed to the same
+    // destination — filter factors multiply, pitch multiplies, amp stacks).
+    LfoTarget lfo2_target{LfoTarget::Off};
+    float lfo2_rate_hz{5.0f};       // 0.05..20
+    float lfo2_depth{0.2f};         // amount
 };
 
 /// One voice — plain struct, no methods with side effects.
@@ -58,6 +75,9 @@ struct Voice {
     int env_stage{0};          // 0=attack 1=decay 2=sustain 3=release
     float filter_state1{0.f}, filter_state2{0.f};  // SVF states
     float lfo_phase{0.f};
+    float lfo2_phase{0.f};     // second LFO phase
+    bool glide_on{false};      // pitch ramp active (mono mode)
+    float glide_hz{0.f};       // running pitch while gliding
     float last_amp{0.f};       // for click-free release
 };
 
@@ -106,4 +126,4 @@ private:
     int oldest_hint_{0};
 };
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

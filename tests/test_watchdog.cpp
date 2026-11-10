@@ -1,4 +1,4 @@
-// addu94 — tests/test_watchdog.cpp
+// ghost_story — tests/test_watchdog.cpp
 #include "test_framework.hpp"
 
 #include "ops/watchdog.hpp"
@@ -7,7 +7,7 @@
 #include <chrono>
 #include <thread>
 
-using addu94::ops::Watchdog;
+using ghost_story::ops::Watchdog;
 
 TEST(watchdog, healthy_thread_never_trips) {
     auto& w = Watchdog::instance();

@@ -1,4 +1,4 @@
-// addu94 — tests/test_sampler.cpp
+// ghost_story — tests/test_sampler.cpp
 //
 // WAV file, Sampler and DrumKit tests (spec §4.1/§4.3). The chunked render
 // helper mirrors tests/test_synth.cpp's render_for, including the tail
@@ -21,16 +21,16 @@
 #include <string>
 #include <vector>
 
-using addu94::audio::DrumKit;
-using addu94::audio::Sampler;
-using addu94::audio::SamplerParams;
-using addu94::audio::WavData;
+using ghost_story::audio::DrumKit;
+using ghost_story::audio::Sampler;
+using ghost_story::audio::SamplerParams;
+using ghost_story::audio::WavData;
 
 namespace {
 
 constexpr double kSr = 48000.0;
 constexpr double kTwoPi = 6.283185307179586476925286766559;
-std::string const kTmpDir = "/tmp/addu94_sampler_test";
+std::string const kTmpDir = "/tmp/ghost_story_sampler_test";
 
 // ---------------------------------------------------------------- helpers
 
@@ -142,7 +142,7 @@ bool write_sine_wav(std::string const& path, double hz, int channels,
         }
     }
     std::string err;
-    return addu94::audio::wav_save(path, w, err);
+    return ghost_story::audio::wav_save(path, w, err);
 }
 
 /// Frames with |x| > threshold, from the first note_on until silence.
@@ -188,9 +188,9 @@ TEST(wav, roundtrip_mono_bit_exact) {
 
     std::string err;
     std::string const path = kTmpDir + "/rt_mono.wav";
-    CHECK(addu94::audio::wav_save(path, w, err));
+    CHECK(ghost_story::audio::wav_save(path, w, err));
     CHECK(err.empty());
-    std::optional<WavData> const back = addu94::audio::wav_load(path, err);
+    std::optional<WavData> const back = ghost_story::audio::wav_load(path, err);
     CHECK(back.has_value());
     if (back.has_value()) {
         CHECK_EQ(back->sample_rate, 48000u);
@@ -217,8 +217,8 @@ TEST(wav, roundtrip_stereo_bit_exact) {
     }
     std::string err;
     std::string const path = kTmpDir + "/rt_stereo.wav";
-    CHECK(addu94::audio::wav_save(path, w, err));
-    std::optional<WavData> const back = addu94::audio::wav_load(path, err);
+    CHECK(ghost_story::audio::wav_save(path, w, err));
+    std::optional<WavData> const back = ghost_story::audio::wav_load(path, err);
     CHECK(back.has_value());
     if (back.has_value()) {
         CHECK_EQ(back->sample_rate, 44100u);
@@ -245,7 +245,7 @@ TEST(wav, loads_hand_built_pcm16) {
     CHECK(write_bytes(path, make_wav_bytes(1, 2, 48000, 16, payload)));
 
     std::string err;
-    std::optional<WavData> const w = addu94::audio::wav_load(path, err);
+    std::optional<WavData> const w = ghost_story::audio::wav_load(path, err);
     CHECK(w.has_value());
     if (w.has_value()) {
         CHECK_EQ(w->sample_rate, 48000u);
@@ -264,7 +264,7 @@ TEST(wav, malformed_input_rejected_without_crash) {
     CHECK(ensure_tmp_dir());
     std::string err;
     auto const expect_rejected = [&](std::string const& path) {
-        std::optional<WavData> const w = addu94::audio::wav_load(path, err);
+        std::optional<WavData> const w = ghost_story::audio::wav_load(path, err);
         if (w.has_value()) {
             CHECK(!"malformed WAV was accepted");
         } else {
@@ -349,13 +349,13 @@ TEST(wav, save_validates_input) {
     std::string err;
     WavData bad;
     bad.channels = 3;
-    CHECK(!addu94::audio::wav_save(kTmpDir + "/never.wav", bad, err));
+    CHECK(!ghost_story::audio::wav_save(kTmpDir + "/never.wav", bad, err));
     CHECK(!err.empty());
 
     WavData uneven;
     uneven.channels = 2;
     uneven.samples = {1.f, 2.f, 3.f};  // not a multiple of 2
-    CHECK(!addu94::audio::wav_save(kTmpDir + "/never.wav", uneven, err));
+    CHECK(!ghost_story::audio::wav_save(kTmpDir + "/never.wav", uneven, err));
     CHECK(!err.empty());
 }
 
@@ -430,6 +430,60 @@ TEST(sampler, tuning_plus12_halves_duration) {
     // natural ~ 24000 frames, tuned ~ 12000 frames (± envelope + interp).
     CHECK_NEAR(static_cast<double>(natural), 24000.0, 500.0);
     CHECK_NEAR(static_cast<double>(tuned),
+               static_cast<double>(natural) / 2.0, 600.0);
+}
+
+TEST(sampler, override_zone_at_note_44_is_reachable) {
+    // Regression: the 44..51 -> 36..43 +12 pad mapping remapped note_on
+    // unconditionally, so an override WAV loaded at 44..51 (DrumKit::
+    // load_override accepts 36..51, has_zone() agreed) was unreachable —
+    // note_on(44) looked up the pad-0 zone and found nothing here.
+    CHECK(ensure_tmp_dir());
+    std::string const path = kTmpDir + "/sine660d.wav";
+    CHECK(write_sine_wav(path, 660.0, 1));
+
+    Sampler s;
+    s.set_sample_rate(kSr);
+    std::string err;
+    CHECK(s.add_zone(44, path, err));
+    CHECK(s.has_zone(44));
+
+    s.note_on(9, 44, 1.0f);
+    CHECK_EQ(s.active_voices(), 1);
+    Rendered r = render_for(s, 0.2);
+    CHECK(r.peak > 0.05f);
+    for (float v : r.left) {
+        CHECK(!std::isnan(v));
+        CHECK(!std::isinf(v));
+    }
+}
+
+TEST(sampler, bank_b_note_falls_back_to_pad_zone_plus12) {
+    CHECK(ensure_tmp_dir());
+    std::string const path = kTmpDir + "/sine440e.wav";
+    CHECK(write_sine_wav(path, 440.0, 1));
+
+    // The 0.5 s sample must fit fully inside the render window or the
+    // audible-frames math clips (that is why 0.6 s, same as the tuning
+    // test above). Fresh Sampler per phase: a shared one would still be
+    // sounding voice 1 into phase 2's render.
+    Sampler natural_s;
+    natural_s.set_sample_rate(kSr);
+    std::string err;
+    CHECK(natural_s.add_zone(36, path, err));
+    natural_s.note_on(9, 36, 1.0f);
+    std::uint32_t const natural =
+        audible_frames(render_for(natural_s, 0.6).left, 0.001f);
+
+    // Bank-B note 44 with no exact zone at 44: pad-0 zone, +12 shift =>
+    // half the natural duration.
+    Sampler shifted_s;
+    shifted_s.set_sample_rate(kSr);
+    CHECK(shifted_s.add_zone(36, path, err));
+    shifted_s.note_on(9, 44, 1.0f);
+    std::uint32_t const shifted =
+        audible_frames(render_for(shifted_s, 0.6).left, 0.001f);
+    CHECK_NEAR(static_cast<double>(shifted),
                static_cast<double>(natural) / 2.0, 600.0);
 }
 
@@ -550,7 +604,7 @@ TEST(sampler, stress_100_note_ons_bounded_and_clean) {
     for (int i = 0; i < 100; ++i) {
         s.note_on(9, 36 + (i % 16), 0.3f + 0.01f * static_cast<float>(i % 8));
     }
-    CHECK(s.active_voices() <= addu94::audio::kSamplerMaxVoices);
+    CHECK(s.active_voices() <= ghost_story::audio::kSamplerMaxVoices);
     Rendered r = render_for(s, 1.0);
     for (std::size_t i = 0; i < r.left.size(); ++i) {
         CHECK(!std::isnan(r.left[i]));
@@ -573,7 +627,7 @@ TEST(drum_kit, fallback_kit_is_audible_and_distinct_per_pad) {
 
     float peaks[8] = {};
     for (int i = 0; i < 8; ++i) {
-        int const note = addu94::audio::kPadBaseNote + i;
+        int const note = ghost_story::audio::kPadBaseNote + i;
         CHECK(dk.sampler().has_zone(note));
         dk.note_on(note, 1.0f);
         Rendered r = render_for(dk, 0.4);
@@ -600,9 +654,9 @@ TEST(drum_kit, render_is_deterministic) {
     CHECK(b.init(kSr, err));
 
     for (int i = 0; i < 8; ++i) {
-        a.note_on(addu94::audio::kPadBaseNote + i,
+        a.note_on(ghost_story::audio::kPadBaseNote + i,
                   0.4f + 0.06f * static_cast<float>(i));
-        b.note_on(addu94::audio::kPadBaseNote + i,
+        b.note_on(ghost_story::audio::kPadBaseNote + i,
                   0.4f + 0.06f * static_cast<float>(i));
     }
     Rendered ra = render_for(a, 0.6);
@@ -679,7 +733,7 @@ TEST(drum_kit, init_rejects_bad_rate) {
 // pads" — there WAS no pack concept; now eight built-ins ship in the box.
 
 TEST(drum_kit, pack_count_and_names) {
-    CHECK_EQ(DrumKit::pack_count(), 8);
+    CHECK_EQ(DrumKit::pack_count(), 16);
     CHECK_EQ(std::string(DrumKit::pack_name(0)), "MPC Classic");
     CHECK_EQ(std::string(DrumKit::pack_name(1)), "808");
     CHECK_EQ(std::string(DrumKit::pack_name(2)), "Lo-Fi");
@@ -688,10 +742,18 @@ TEST(drum_kit, pack_count_and_names) {
     CHECK_EQ(std::string(DrumKit::pack_name(5)), "Jungle");
     CHECK_EQ(std::string(DrumKit::pack_name(6)), "Trap");
     CHECK_EQ(std::string(DrumKit::pack_name(7)), "House");
+    CHECK_EQ(std::string(DrumKit::pack_name(8)), "Acoustic");
+    CHECK_EQ(std::string(DrumKit::pack_name(9)), "Linn 80s");
+    CHECK_EQ(std::string(DrumKit::pack_name(10)), "DnB");
+    CHECK_EQ(std::string(DrumKit::pack_name(11)), "Dub");
+    CHECK_EQ(std::string(DrumKit::pack_name(12)), "Ambient");
+    CHECK_EQ(std::string(DrumKit::pack_name(13)), "Electro");
+    CHECK_EQ(std::string(DrumKit::pack_name(14)), "Garage");
+    CHECK_EQ(std::string(DrumKit::pack_name(15)), "Breaks");
     // Out-of-range queries are honest nullptrs; the valid names are all
     // distinct so a UI list can never show two identical entries.
     CHECK(DrumKit::pack_name(-1) == nullptr);
-    CHECK(DrumKit::pack_name(8) == nullptr);
+    CHECK(DrumKit::pack_name(DrumKit::pack_count()) == nullptr);
     for (int i = 0; i < DrumKit::pack_count(); ++i) {
         for (int j = i + 1; j < DrumKit::pack_count(); ++j) {
             CHECK(std::string_view(DrumKit::pack_name(i)) !=
@@ -718,7 +780,7 @@ TEST(drum_kit, load_pack_switches_without_error) {
     CHECK(!dk.load_pack(DrumKit::pack_count(), err));
     CHECK(!err.empty());
     // After all the switching, pads still sound.
-    dk.note_on(addu94::audio::kPadBaseNote, 1.0f);
+    dk.note_on(ghost_story::audio::kPadBaseNote, 1.0f);
     Rendered r = render_for(dk, 0.4);
     CHECK(r.peak > 0.05f);
 }
@@ -730,7 +792,7 @@ TEST(drum_kit, every_pack_every_pad_is_audible) {
     for (int p = 0; p < DrumKit::pack_count(); ++p) {
         CHECK(dk.load_pack(p, err));
         for (int i = 0; i < 8; ++i) {
-            dk.note_on(addu94::audio::kPadBaseNote + i, 0.9f);
+            dk.note_on(ghost_story::audio::kPadBaseNote + i, 0.9f);
             Rendered r = render_for(dk, 0.35);
             CHECK(r.peak > 0.02f);
             dk.sampler().all_sound_off();
@@ -749,8 +811,8 @@ TEST(drum_kit, packs_render_distinct_kits) {
     CHECK(a.init(kSr, err));
     CHECK(b.init(kSr, err));
     CHECK(b.load_pack(1, err));
-    a.note_on(addu94::audio::kPadBaseNote, 1.0f);
-    b.note_on(addu94::audio::kPadBaseNote, 1.0f);
+    a.note_on(ghost_story::audio::kPadBaseNote, 1.0f);
+    b.note_on(ghost_story::audio::kPadBaseNote, 1.0f);
     Rendered ra = render_for(a, 1.4);
     Rendered rb = render_for(b, 1.4);
     CHECK(ra.peak > 0.05f);
@@ -760,7 +822,7 @@ TEST(drum_kit, packs_render_distinct_kits) {
     DrumKit c;
     CHECK(c.init(kSr, err));
     CHECK(c.load_pack(1, err));
-    c.note_on(addu94::audio::kPadBaseNote, 1.0f);
+    c.note_on(ghost_story::audio::kPadBaseNote, 1.0f);
     Rendered rc = render_for(c, 1.4);
     CHECK_EQ(rc.left.size(), rb.left.size());
     for (std::size_t i = 0; i < rc.left.size(); ++i) {
@@ -786,8 +848,8 @@ TEST(drum_kit, every_pack_pair_renders_distinct) {
             CHECK(b.init(kSr, err));
             CHECK(a.load_pack(i, err));
             CHECK(b.load_pack(j, err));
-            a.note_on(addu94::audio::kPadBaseNote, 1.0f);
-            b.note_on(addu94::audio::kPadBaseNote, 1.0f);
+            a.note_on(ghost_story::audio::kPadBaseNote, 1.0f);
+            b.note_on(ghost_story::audio::kPadBaseNote, 1.0f);
             Rendered ra = render_for(a, 1.4);
             Rendered rb = render_for(b, 1.4);
             double const ea = energy(ra);

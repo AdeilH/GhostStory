@@ -1,6 +1,6 @@
-// addu94 — src/ops/doctor.hpp
+// ghost_story — src/ops/doctor.hpp
 //
-// `addu94 doctor` (spec §6.6): one-command self-diagnosis. Human text +
+// `ghost_story doctor` (spec §6.6): one-command self-diagnosis. Human text +
 // doctor-report.json. Every check returns pass/warn/fail with evidence.
 #pragma once
 
@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 enum class CheckStatus : std::uint8_t { Pass, Warn, Fail };
 
@@ -28,7 +28,7 @@ struct DoctorReport {
 /// Run all checks. Non-destructive; safe anytime.
 DoctorReport run_doctor();
 
-/// `addu94 repair` (spec §6.7): config schema migration, journal replay
+/// `ghost_story repair` (spec §6.7): config schema migration, journal replay
 /// validation, manifest re-probe. Returns per-action results.
 struct RepairReport {
     std::vector<Check> actions;
@@ -36,4 +36,4 @@ struct RepairReport {
 };
 DoctorReport run_repair();
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

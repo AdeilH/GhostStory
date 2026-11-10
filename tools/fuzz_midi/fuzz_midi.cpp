@@ -1,4 +1,4 @@
-// addu94 — tools/fuzz_midi/fuzz_midi.cpp
+// ghost_story — tools/fuzz_midi/fuzz_midi.cpp
 //
 // MIDI fuzz harness (spec §7.5): fires malformed/garbage MIDI streams at
 // the engine through a virtual ALSA port — random bytes, SysEx storms,
@@ -17,7 +17,7 @@
 #include <thread>
 #include <vector>
 
-using namespace addu94::midi;
+using namespace ghost_story::midi;
 
 namespace {
 
@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
     auto const seed = argc > 2 ? std::strtoul(argv[2], nullptr, 10) : 12345u;
 
     AlsaClient engine;
-    if (!engine.open("addu94-fuzz-target", true)) {
+    if (!engine.open("ghost_story-fuzz-target", true)) {
         std::fprintf(stderr, "no ALSA\n");
         return 2;
     }
@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     AlsaClient attacker;
-    if (!attacker.open("addu94-fuzz-attacker", true)) return 2;
+    if (!attacker.open("ghost_story-fuzz-attacker", true)) return 2;
     if (!engine.connect_input(attacker.client_id(), attacker.virtual_port())) {
         std::fprintf(stderr, "connect failed\n");
         return 2;

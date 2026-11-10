@@ -1,4 +1,4 @@
-// addu94 — src/device/manifest.cpp
+// ghost_story — src/device/manifest.cpp
 #include "device/manifest.hpp"
 
 #include <nlohmann/json.hpp>
@@ -104,7 +104,7 @@ std::string sha256_hex(std::string const& s) {
 
 }  // namespace
 
-namespace addu94::device {
+namespace ghost_story::device {
 
 std::string control_kind_to_string(Control::Kind k) {
     switch (k) {
@@ -259,7 +259,7 @@ std::filesystem::path manifest_path() {
                    ? std::filesystem::path{home} / ".local" / "share"
                    : std::filesystem::path{"."};
     }
-    return base / "addu94" / "devices" / "device_manifest.json";
+    return base / "ghost_story" / "devices" / "device_manifest.json";
 }
 
 bool save_manifest(Manifest const& m, std::filesystem::path const& path) {
@@ -304,4 +304,4 @@ bool quarantine_file(std::filesystem::path const& path) {
     return true;
 }
 
-}  // namespace addu94::device
+}  // namespace ghost_story::device

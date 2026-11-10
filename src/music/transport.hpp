@@ -1,4 +1,4 @@
-// addu94 — src/music/transport.hpp
+// ghost_story — src/music/transport.hpp
 //
 // Sample-accurate transport (spec §3): position advances in SAMPLES inside
 // the audio callback; all musical quantities derive from it via exact
@@ -16,7 +16,7 @@
 #include <atomic>
 #include <cstdint>
 
-namespace addu94::music {
+namespace ghost_story::music {
 
 inline constexpr int kPPQ = 96;  // ticks per quarter note (internal grid)
 
@@ -31,14 +31,31 @@ struct TransportControl {
     std::atomic<std::uint64_t> loop_bars{0};   // 0 = no loop
     std::atomic<bool> metronome_on{false};
     std::atomic<float> metronome_gain{0.35f};
-    std::atomic<bool> count_in_bars{0};        // 0..4
+    std::atomic<bool> count_in_bars{false};    // armed on/off; NO consumer
+                                               // yet — count-in needs a
+                                               // pre-roll engine in Transport
+                                               // (transport milestone)
     // Transport state requests, applied by the RT thread at buffer
     // boundaries (control thread writes, RT consumes-and-clears).
     static constexpr std::uint8_t kReqNone = 0;
     static constexpr std::uint8_t kReqPlay = 1;
     static constexpr std::uint8_t kReqStop = 2;
     static constexpr std::uint8_t kReqToggleRecord = 3;
+    static constexpr std::uint8_t kReqPositionSet = 4;
     std::atomic<std::uint8_t> state_req{kReqNone};
+    // kReqPositionSet payload: the playhead target in samples (RT applies
+    // it sample-exactly, stopped or rolling — clicking the arrangement
+    // moves the playhead). start_position is WHERE play/record begin: the
+    // app thread writes it together with the position request, so a later
+    // kReqPlay starts from the playhead instead of the top.
+    std::atomic<std::uint64_t> position_req{0};
+    std::atomic<std::uint64_t> start_position{0};
+    // RT-side mirror of PlayState (0 stopped / 1 playing / 2 recording),
+    // stored by Transport::advance each buffer. The master render hook runs
+    // BEFORE advance() inside the callback, so it reads the PREVIOUS
+    // buffer's state — a stop releases clip voices one buffer late, which
+    // is inaudible (and the click scheduling behaves the same way).
+    std::atomic<std::uint8_t> play_state{0};
 };
 
 class Transport {
@@ -101,4 +118,4 @@ private:
     std::uint32_t sr_{48000};
 };
 
-}  // namespace addu94::music
+}  // namespace ghost_story::music

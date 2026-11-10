@@ -1,8 +1,8 @@
 # MPK Mini SysEx — findings & methodology
 
-Status: **living document** — updated whenever `addu94 probe --capture`
+Status: **living document** — updated whenever `ghost_story probe --capture`
 produces new evidence. Facts must be backed by captures under
-`~/.local/share/addu94/devices/captures/` (kept per-model); no folklore.
+`~/.local/share/ghost_story/devices/captures/` (kept per-model); no folklore.
 
 ## What we can confirm today (2026-11-03 — live MPK mini 3, USB full speed)
 
@@ -11,7 +11,7 @@ produces new evidence. Facts must be backed by captures under
   → manufacturer `0x47` (inMusic/Akai), family `0x4900`, model `0x1900`,
   version `1.1.8`, ASCII payload = device serial (`A12102248724519`).
   Note: the reply only arrives when the device's output port is subscribed
-  to our input — `addu94 probe` now does both directions.
+  to our input — `ghost_story probe` now does both directions.
 - **Pads confirmed**: MK3 pads send Note On/Off on **channel 9** (MIDI ch 10)
   — bank A pad 3 = note 38, full-strike velocity 127. Inventory updated.
 - **Knobs observed**: CC#2 stream while untouched (repeating values ~16-34,
@@ -27,7 +27,7 @@ produces new evidence. Facts must be backed by captures under
 
 ## Capture methodology
 
-1. `addu94 probe --capture` runs a 60 s capture of every message the unit
+1. `ghost_story probe --capture` runs a 60 s capture of every message the unit
    emits (see `CaptureRecord`), including unrecognized ones.
 2. For preset dumps: press each hardware preset button in turn during a
    capture; diff captures to isolate the preset SysEx block.

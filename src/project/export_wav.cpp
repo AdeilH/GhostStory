@@ -1,4 +1,4 @@
-// addu94 — src/project/export_wav.cpp
+// ghost_story — src/project/export_wav.cpp
 //
 // Offline export to WAV (see export_wav.hpp). Contains a private minimal
 // RIFF/WAVE writer (IEEE float 32-bit, stereo, little-endian) so this
@@ -18,7 +18,7 @@
 #include <fstream>
 #include <utility>
 
-namespace addu94::project {
+namespace ghost_story::project {
 namespace {
 
 void put_u16(std::uint8_t* p, std::uint16_t v) noexcept {
@@ -131,4 +131,4 @@ bool export_wav_stems(ExportSpec const& spec, std::string& error) {
                          master.right, sr, error);
 }
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

@@ -1,4 +1,4 @@
-// addu94 — tests/test_project.cpp
+// ghost_story — tests/test_project.cpp
 #include "test_framework.hpp"
 
 #include "project/document.hpp"
@@ -20,14 +20,14 @@
 #include <system_error>
 #include <vector>
 
-using addu94::music::Clip;
-using addu94::music::ClipEvent;
-using addu94::project::Journal;
-using addu94::project::JournalEntry;
-using addu94::project::JournalOp;
-using addu94::project::Project;
-using addu94::project::SongSection;
-using addu94::project::Track;
+using ghost_story::music::Clip;
+using ghost_story::music::ClipEvent;
+using ghost_story::project::Journal;
+using ghost_story::project::JournalEntry;
+using ghost_story::project::JournalOp;
+using ghost_story::project::Project;
+using ghost_story::project::SongSection;
+using ghost_story::project::Track;
 
 namespace {
 
@@ -35,7 +35,7 @@ std::atomic<int> temp_counter{0};
 
 std::filesystem::path temp_dir(char const* tag) {
     auto p = std::filesystem::temp_directory_path() /
-             ("addu94_test_project_" + std::string(tag) + "_" +
+             ("ghost_story_test_project_" + std::string(tag) + "_" +
               std::to_string(
                   std::chrono::steady_clock::now().time_since_epoch().count()) +
               "_" + std::to_string(temp_counter.fetch_add(1)));
@@ -50,11 +50,20 @@ bool events_equal(ClipEvent const& a, ClipEvent const& b) {
 
 bool clips_equal(Clip const& a, Clip const& b) {
     if (a.length_ticks != b.length_ticks || a.next_take != b.next_take ||
-        a.events.size() != b.events.size()) {
+        a.events.size() != b.events.size() ||
+        a.boxes.size() != b.boxes.size()) {
         return false;
     }
     for (std::size_t i = 0; i < a.events.size(); ++i) {
         if (!events_equal(a.events[i], b.events[i])) return false;
+    }
+    for (std::size_t i = 0; i < a.boxes.size(); ++i) {
+        auto const& x = a.boxes[i];
+        auto const& y = b.boxes[i];
+        if (x.take != y.take || x.start_tick != y.start_tick ||
+            x.length_ticks != y.length_ticks) {
+            return false;
+        }
     }
     return true;
 }
@@ -117,6 +126,11 @@ Project make_full_project() {
         ClipEvent{48, 1, 64, 90, false, 1},
         ClipEvent{95, 9, 127, 1, true, 2},
     };
+    // Per-take boxes: [rec 1] [rec 2] both persist across save/load.
+    c.boxes = {
+        ghost_story::music::TakeBox{0, 0, 96 * 4},
+        ghost_story::music::TakeBox{1, 96 * 4, 96 * 2},
+    };
     t.clips.push_back(std::move(c));
     p.tracks.push_back(std::move(t));
     p.sections.push_back(SongSection{"intro", 0, 4});
@@ -128,20 +142,20 @@ Project make_full_project() {
 
 TEST(project, roundtrip_default) {
     auto const p = Project::make_default();
-    auto const s = addu94::project::project_to_json(p);
+    auto const s = ghost_story::project::project_to_json(p);
     Project q;
     std::string err;
-    CHECK(addu94::project::project_from_json(s, q, err));
+    CHECK(ghost_story::project::project_from_json(s, q, err));
     CHECK(err.empty());
     CHECK(projects_equal(p, q));
 }
 
 TEST(project, roundtrip_full_with_clips_and_sections) {
     auto const p = make_full_project();
-    auto const s = addu94::project::project_to_json(p);
+    auto const s = ghost_story::project::project_to_json(p);
     Project q;
     std::string err;
-    CHECK(addu94::project::project_from_json(s, q, err));
+    CHECK(ghost_story::project::project_from_json(s, q, err));
     CHECK(err.empty());
     CHECK(projects_equal(p, q));
     // All serialized, including clip events.
@@ -150,8 +164,8 @@ TEST(project, roundtrip_full_with_clips_and_sections) {
 
 TEST(project, dump_is_deterministic_sorted) {
     auto const p = make_full_project();
-    auto const s1 = addu94::project::project_to_json(p);
-    auto const s2 = addu94::project::project_to_json(p);
+    auto const s1 = ghost_story::project::project_to_json(p);
+    auto const s2 = ghost_story::project::project_to_json(p);
     CHECK_EQ(s1, s2);
     // Sorted keys: "key" sorts before "meter_den" < ... < "tempo_bpm".
     CHECK(s1.starts_with("{\"key\":\"Eb\""));
@@ -160,27 +174,27 @@ TEST(project, dump_is_deterministic_sorted) {
 TEST(project, malformed_never_throws) {
     Project out;
     std::string err;
-    CHECK(!addu94::project::project_from_json("{not json!!", out, err));
+    CHECK(!ghost_story::project::project_from_json("{not json!!", out, err));
     CHECK(!err.empty());
-    CHECK(!addu94::project::project_from_json("{\"schema\":1,\"name\"", out,
+    CHECK(!ghost_story::project::project_from_json("{\"schema\":1,\"name\"", out,
                                               err));
-    CHECK(!addu94::project::project_from_json("[]", out, err));
-    CHECK(!addu94::project::project_from_json("null", out, err));
-    CHECK(!addu94::project::project_from_json("42", out, err));
-    CHECK(!addu94::project::project_from_json("", out, err));
+    CHECK(!ghost_story::project::project_from_json("[]", out, err));
+    CHECK(!ghost_story::project::project_from_json("null", out, err));
+    CHECK(!ghost_story::project::project_from_json("42", out, err));
+    CHECK(!ghost_story::project::project_from_json("", out, err));
     // Wrong types.
-    CHECK(!addu94::project::project_from_json(R"({"schema":"1"})", out, err));
-    CHECK(!addu94::project::project_from_json(R"({"schema":1,"name":7})", out,
+    CHECK(!ghost_story::project::project_from_json(R"({"schema":"1"})", out, err));
+    CHECK(!ghost_story::project::project_from_json(R"({"schema":1,"name":7})", out,
                                               err));
-    CHECK(!addu94::project::project_from_json(R"({"schema":1,"tracks":5})",
+    CHECK(!ghost_story::project::project_from_json(R"({"schema":1,"tracks":5})",
                                               out, err));
-    CHECK(!addu94::project::project_from_json(
+    CHECK(!ghost_story::project::project_from_json(
         R"({"schema":1,"tracks":[{"volume":"loud"}]})", out, err));
-    CHECK(!addu94::project::project_from_json(
+    CHECK(!ghost_story::project::project_from_json(
         R"({"schema":1,"tracks":[{"mute":"yes"}]})", out, err));
     // Missing fields.
-    CHECK(!addu94::project::project_from_json(R"({"schema":1})", out, err));
-    CHECK(!addu94::project::project_from_json(
+    CHECK(!ghost_story::project::project_from_json(R"({"schema":1})", out, err));
+    CHECK(!ghost_story::project::project_from_json(
         R"({"schema":1,"name":"a","tempo_bpm":120,"meter_num":4,)"
         R"("meter_den":4,"key":"C","tracks":[],"sections":[]})",
         out, err));  // missing "scale"
@@ -190,20 +204,20 @@ TEST(project, unsupported_schema_rejected) {
     Project out;
     std::string err;
     auto j = nlohmann::json::parse(
-        addu94::project::project_to_json(make_full_project()));
+        ghost_story::project::project_to_json(make_full_project()));
     j["schema"] = 2;
-    CHECK(!addu94::project::project_from_json(j.dump(), out, err));
+    CHECK(!ghost_story::project::project_from_json(j.dump(), out, err));
     CHECK_EQ(err, "unsupported schema");
 }
 
 TEST(project, unknown_extra_fields_ignored) {
     auto const p = make_full_project();
-    auto j = nlohmann::json::parse(addu94::project::project_to_json(p));
+    auto j = nlohmann::json::parse(ghost_story::project::project_to_json(p));
     j["something_new"] = nlohmann::json::array({"a", 1, true});
     j["tracks"][0]["future_param"] = 42;
     Project q;
     std::string err;
-    CHECK(addu94::project::project_from_json(j.dump(), q, err));
+    CHECK(ghost_story::project::project_from_json(j.dump(), q, err));
     CHECK(projects_equal(p, q));
 }
 
@@ -457,7 +471,7 @@ TEST(journal, save_atomic_then_load) {
         CHECK(!std::filesystem::exists(dir / "project.json.tmp"));
     }
     Project q;
-    CHECK(addu94::project::load_project(dir.string(), q, err));
+    CHECK(ghost_story::project::load_project(dir.string(), q, err));
     CHECK(err.empty());
     CHECK(projects_equal(p, q));
     // A fresh journal in the same dir has nothing left to replay.
@@ -474,7 +488,7 @@ TEST(journal, load_empty_dir_gives_default) {
     auto dir = temp_dir("empty");
     std::string err;
     Project q;
-    CHECK(addu94::project::load_project(dir.string(), q, err));
+    CHECK(ghost_story::project::load_project(dir.string(), q, err));
     CHECK(projects_equal(q, Project::make_default()));
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);
@@ -488,7 +502,7 @@ TEST(journal, load_quarantines_corrupt_project_json) {
     }
     std::string err;
     Project q;
-    CHECK(addu94::project::load_project(dir.string(), q, err));
+    CHECK(ghost_story::project::load_project(dir.string(), q, err));
     CHECK(projects_equal(q, Project::make_default()));
     // Corrupt file quarantined, not deleted.
     bool found = false;
@@ -527,7 +541,7 @@ TEST(journal, load_recovers_project_plus_journal) {
         p.tracks.push_back(std::move(live));  // app applies the same edit
     }
     Project q;
-    CHECK(addu94::project::load_project(dir.string(), q, err));
+    CHECK(ghost_story::project::load_project(dir.string(), q, err));
     CHECK(projects_equal(p, q));  // checkpoint + 2 journal edits
     CHECK_EQ(q.tracks.back().name, "Live");
     std::error_code ec;
@@ -549,7 +563,7 @@ TEST(journal, at_most_one_second_of_lost_edits) {
         }
     }
     Project q;
-    CHECK(addu94::project::load_project(dir.string(), q, err));
+    CHECK(ghost_story::project::load_project(dir.string(), q, err));
     CHECK_EQ(q.tracks.size(), 14u);  // 4 default + 10 recovered
     for (int i = 0; i < 10; ++i) {
         CHECK_EQ(q.tracks[static_cast<std::size_t>(4 + i)].name,

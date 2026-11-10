@@ -1,4 +1,4 @@
-// addu94 — src/ops/watchdog.hpp
+// ghost_story — src/ops/watchdog.hpp
 //
 // Watchdog (spec §6.1): registered threads push heartbeats (atomic ns
 // timestamps); the monitor thread checks every second. Two consecutive
@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 class Watchdog {
 public:
@@ -60,9 +60,9 @@ private:
     std::thread monitor_;
 };
 
-/// Append a structured incident to ~/.local/share/addu94/incidents.jsonl
+/// Append a structured incident to ~/.local/share/ghost_story/incidents.jsonl
 /// (never throws; best-effort I/O from any thread).
 void log_incident(std::string const& subsystem, std::string const& kind,
                   std::string const& detail);
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

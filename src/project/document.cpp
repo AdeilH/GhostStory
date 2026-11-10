@@ -1,4 +1,4 @@
-// addu94 — src/project/document.cpp
+// ghost_story — src/project/document.cpp
 #include "project/document.hpp"
 
 // The vendored nlohmann (3.11.3) uses std::is_trivial in a static_assert,
@@ -12,7 +12,7 @@
 #include <limits>
 #include <string>
 
-namespace addu94::project {
+namespace ghost_story::project {
 
 namespace {
 
@@ -142,6 +142,8 @@ using nlohmann::json;
         return false;
     }
     if (!get_i64(j, "length_ticks", c.length_ticks, error)) return false;
+    // Optional placement — older project files predate clip placement.
+    c.start_tick = j.value("start_tick", std::int64_t{0});
     if (!get_int(j, "next_take", c.next_take, error)) return false;
     json const* events = nullptr;
     if (!expect_array(j, "events", events, error)) return false;
@@ -159,6 +161,20 @@ using nlohmann::json;
         if (!get_bool(je, "on", e.on, error)) return false;
         if (!get_int(je, "take", e.take, error)) return false;
         c.events.push_back(e);
+    }
+    // Optional take boxes — the per-take blocks the arrangement draws.
+    // Files from before the boxes existed simply omit the field (the clip
+    // then renders as one whole-window block, the old honest view).
+    if (auto const it = j.find("boxes"); it != j.end() && it->is_array()) {
+        for (auto const& jb : *it) {
+            music::TakeBox b;
+            if (!get_int(jb, "take", b.take, error)) return false;
+            if (!get_i64(jb, "start_tick", b.start_tick, error)) return false;
+            if (!get_i64(jb, "length_ticks", b.length_ticks, error)) {
+                return false;
+            }
+            c.boxes.push_back(b);
+        }
     }
     return true;
 }
@@ -218,6 +234,7 @@ std::string project_to_json(Project const& p) {
             for (auto const& c : t.clips) {
                 json jc;
                 jc["length_ticks"] = c.length_ticks;
+                jc["start_tick"] = c.start_tick;  // timeline placement
                 jc["next_take"] = c.next_take;
                 json events = json::array();
                 events.get_ref<json::array_t&>().reserve(c.events.size());
@@ -225,6 +242,14 @@ std::string project_to_json(Project const& p) {
                     events.push_back(clip_event_to_json(e));
                 }
                 jc["events"] = std::move(events);
+                json boxes = json::array();
+                boxes.get_ref<json::array_t&>().reserve(c.boxes.size());
+                for (auto const& b : c.boxes) {
+                    boxes.push_back(json{{"take", b.take},
+                                         {"start_tick", b.start_tick},
+                                         {"length_ticks", b.length_ticks}});
+                }
+                jc["boxes"] = std::move(boxes);
                 clips.push_back(std::move(jc));
             }
             jt["clips"] = std::move(clips);
@@ -309,4 +334,4 @@ bool project_from_json(std::string const& json_str, Project& out,
     return true;
 }
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

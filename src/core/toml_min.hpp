@@ -1,4 +1,4 @@
-// addu94 — src/core/toml_min.hpp
+// ghost_story — src/core/toml_min.hpp
 //
 // Minimal TOML-subset parser for OUR OWN config files (config.toml,
 // profile.toml, rules.toml). Supports: [sections], comments (#), key =
@@ -17,7 +17,7 @@
 #include <string_view>
 #include <vector>
 
-namespace addu94::core {
+namespace ghost_story::core {
 
 struct TomlValue {
     enum class Type : std::uint8_t { String, Int, Float, Bool } type{Type::String};
@@ -51,4 +51,4 @@ struct TomlError {
 /// Parse text; returns nullopt + error on malformed input.
 std::optional<TomlTable> toml_parse(std::string_view text, TomlError& err);
 
-}  // namespace addu94::core
+}  // namespace ghost_story::core

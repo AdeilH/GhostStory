@@ -1,4 +1,4 @@
-// addu94 — tools/mpk_monitor.cpp (dev tool, not shipped)
+// ghost_story — tools/mpk_monitor.cpp (dev tool, not shipped)
 // Live monitor: connects to the MPK Mini and prints decoded events for
 // N seconds. Usage: mpk_monitor [seconds]
 #include "midi/alsa_client.hpp"
@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <thread>
 
-using namespace addu94::midi;
+using namespace ghost_story::midi;
 
 struct PrintSink : EventSink {
     void on_midi(MidiEvent const& ev) override {
@@ -30,7 +30,7 @@ struct PrintSink : EventSink {
 int main(int argc, char** argv) {
     int const seconds = argc > 1 ? std::atoi(argv[1]) : 10;
     AlsaClient client;
-    if (!client.open("addu94-monitor", true)) { std::fprintf(stderr, "no ALSA\n"); return 1; }
+    if (!client.open("ghost_story-monitor", true)) { std::fprintf(stderr, "no ALSA\n"); return 1; }
     PrintSink sink; sink.set_t0(client.heartbeat_ns());
     client.set_sink(&sink);
     client.start();

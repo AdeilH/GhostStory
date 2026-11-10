@@ -1,4 +1,4 @@
-// addu94 — tests/test_json.cpp
+// ghost_story — tests/test_json.cpp
 #include "test_framework.hpp"
 
 #include <nlohmann/json.hpp>

@@ -1,7 +1,7 @@
-# addu94 — cmake/compiler_flags.cmake
+# ghost_story — cmake/compiler_flags.cmake
 # Warning policy per ADR 001: strict on first-party code.
 
-function(addu94_apply_warnings target)
+function(ghost_story_apply_warnings target)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(${target} PRIVATE
             -Wall
@@ -19,7 +19,7 @@ function(addu94_apply_warnings target)
             -Wdouble-promotion
             -Wformat=2
         )
-        if(ADDU94_WARNINGS_AS_ERRORS)
+        if(GHOST_STORY_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE -Werror)
         endif()
     endif()

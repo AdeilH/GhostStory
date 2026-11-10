@@ -1,4 +1,4 @@
-// addu94 — src/audio/sampler.hpp
+// ghost_story — src/audio/sampler.hpp
 //
 // 64-voice sample player (spec §4.1/§4.3): WAV zones are preloaded on the
 // control thread; playback is one-shot with linear interpolation, a
@@ -17,8 +17,12 @@
 // sample memory is NEVER deallocated from the audio thread.
 //
 // Pad mapping (drum-kit mode, spec §4.3): notes 36..43 are pads 0..7 (Bank
-// A); notes 44..51 address the same pads with an extra +12 semitone shift.
-// Notes outside 36..51 are natural one-shots (no tuning/decay/choke).
+// A); notes 44..51 (Bank B) address the same pads with an extra +12
+// semitone shift — PLAY mode routes both banks here, so all 16 hardware
+// pads drum. An exact zone loaded at the literal note (add_zone/
+// load_override accept 36..51) is played as-is before the pad mapping
+// applies. Notes outside 36..51 are natural one-shots (no tuning/decay/
+// choke).
 //
 // Output: per-frame soft clip (tanh) after voice summation keeps the mix in
 // (-1, 1) under heavy polyphony (64 stacked one-shots would otherwise sum
@@ -34,7 +38,7 @@
 
 #include "audio/wav_file.hpp"
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 inline constexpr int kSamplerMaxVoices = 64;
 inline constexpr int kPadBaseNote = 36;  // Bank A pad 1 (kick)
@@ -113,4 +117,4 @@ private:
     int oldest_hint_{0};
 };
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

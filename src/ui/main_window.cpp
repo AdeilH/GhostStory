@@ -1,9 +1,12 @@
-// addu94 — src/ui/main_window.cpp
+// ghost_story — src/ui/main_window.cpp
 #include "ui/main_window.hpp"
 
 #include "log/logger.hpp"
+#include "ui/app_gui.hpp"
 #include "ui/theme.hpp"
 
+#include <QCloseEvent>
+#include <QApplication>
 #include <QCursor>
 #include <QFont>
 #include <QInputDialog>
@@ -14,26 +17,23 @@
 #include <QPainter>
 #include <QPen>
 #include <QPolygonF>
+#include <QSettings>
 #include <QShortcut>
+#include <QShowEvent>
 #include <QTimerEvent>
 #include <QVBoxLayout>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <format>
 #include <string>
 
-namespace addu94::ui {
+namespace ghost_story::ui {
 
 namespace {
 
-using theme::kAccent;
-using theme::kAccentHot;
-using theme::kBorder;
-using theme::kMuted;
-using theme::kRecord;
-using theme::kText;
 using theme::with_alpha;
 
 constexpr int kUiHz = 30;                 // app-event drain / repaint rate
@@ -63,18 +63,25 @@ public:
         setFixedHeight(static_cast<int>(kBarHeight));
         setMouseTracking(true);
         setToolTip(
-            "Transport — play (space), stop, record (R), metronome (M). "
-            "Drag BPM/LOOP vertically to change, double-click to type. "
-            "Drag the click bar for metronome level");
+            "Transport — play/stop (space), record (R), metronome (M).\n"
+            "BPM — tempo in beats per minute; drag vertically or "
+            "double-click to type (20..333). Drives the delay-time FX too.\n"
+            "METER — beats per bar / which beat counts (e.g. 4/4).\n"
+            "LOOP — transport loop length in bars; ∞ = the clip keeps "
+            "looping forever.\n"
+            "click — metronome volume slider.");
     }
 
     // Shortcut entries (MainWindow wires Space / R / M).
     void shortcut_play() {
+        // Same route as the button: TransportPlay/Stop COMMANDS, so a UI
+        // stop flushes the recorder pending notes and saves the project
+        // exactly like the hardware stop does (and play gets the same
+        // metronome-on default).
         bool const playing = position_advancing();
-        engine_.audio().transport_control().state_req.store(
-            playing ? music::TransportControl::kReqStop
-                    : music::TransportControl::kReqPlay,
-            std::memory_order_release);
+        engine_.command({playing ? mapping::Action::TransportStop
+                                 : mapping::Action::TransportPlay,
+                         0, 0});
     }
     void shortcut_record() { engine_.command({mapping::Action::TransportRecord, 0, 0}); }
     void shortcut_metronome() {
@@ -111,8 +118,10 @@ protected:
                              by, kBtnSize, kBtnSize};
             btn_rects_[i] = btn;
             paint_button(p, btn, i);
-            // Tiny keyboard hints under the buttons.
-            p.setPen(kMuted);
+            // Tiny keyboard hints under the buttons. 14px tall: drawText
+            // clips to the rect, and the 9pt line box is ~14.2px — the old
+            // 12px box shaved the p descender off "space".
+            p.setPen(theme::pal().muted);
             p.setFont(hint_font);
             char const* hint = i == 0 ? "space"
                                : i == 2 ? "R"
@@ -120,7 +129,7 @@ protected:
                                         : "";
             if (hint[0] != '\0') {
                 p.drawText(QRectF{btn.left() - 6.0, btn.bottom() + 1.0,
-                                  btn.width() + 12.0, 12.0},
+                                  btn.width() + 12.0, 14.0},
                            Qt::AlignCenter, QString(hint));
             }
         }
@@ -143,9 +152,9 @@ protected:
         loop_rect_ = QRectF{x - 66.0, 8.0, 66.0, full.height() - 16.0};
 
         // --- click (metronome gain): thin slider in an inset well ---
-        p.setPen(kMuted);
+        p.setPen(theme::pal().muted);
         p.setFont(label_font);
-        p.drawText(QRectF{x, full.height() / 2.0 - 15.0, 64.0, 11.0},
+        p.drawText(QRectF{x, full.height() / 2.0 - 17.0, 64.0, 13.0},
                    Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral("click"));
         QRectF const track{x, full.height() / 2.0 + 1.0, 64.0, 5.0};
         click_rect_ = track.adjusted(-8.0, -12.0, 8.0, 12.0);
@@ -155,18 +164,18 @@ protected:
                 std::memory_order_relaxed);
         double const fill = track.width() * std::clamp(static_cast<double>(gain), 0.0, 1.0);
         QLinearGradient gain_fill{track.topLeft(), track.bottomLeft()};
-        gain_fill.setColorAt(0.0, kAccentHot);
-        gain_fill.setColorAt(1.0, kAccent);
+        gain_fill.setColorAt(0.0, theme::pal().accent_hot);
+        gain_fill.setColorAt(1.0, theme::pal().accent);
         p.setPen(Qt::NoPen);
         p.setBrush(gain_fill);
         p.drawRoundedRect(QRectF{track.left(), track.top(), fill, track.height()},
                           2, 2);
-        p.setBrush(kText);
+        p.setBrush(theme::pal().text);
         p.drawEllipse(QPointF{track.left() + fill, track.center().y()}, 5.0, 5.0);
 
         // --- position readout (right, monospace, with a playing pulse dot) ---
         p.setFont(theme::mono_font(font(), 12));
-        p.setPen(kText);
+        p.setPen(theme::pal().text);
         p.drawText(QRectF{full.right() - 228.0, 0.0, 208.0,
                           static_cast<double>(height())},
                    Qt::AlignRight | Qt::AlignVCenter,
@@ -176,10 +185,10 @@ protected:
             double const glow =
                 0.55 + 0.45 * std::sin(static_cast<double>(now_ms_) / 240.0);
             p.setPen(Qt::NoPen);
-            p.setBrush(with_alpha(kAccent, 0.20 * glow));
+            p.setBrush(with_alpha(theme::pal().accent, 0.20 * glow));
             p.drawEllipse(QPointF{full.right() - 236.0, full.center().y()},
                           6.5, 6.5);
-            p.setBrush(with_alpha(kAccent, 0.45 + 0.55 * glow));
+            p.setBrush(with_alpha(theme::pal().accent, 0.45 + 0.55 * glow));
             p.drawEllipse(QPointF{full.right() - 236.0, full.center().y()},
                           3.0, 3.0);
         }
@@ -351,26 +360,28 @@ private:
         QRectF const area{x, 0.0, block_w, h};
 
         // Hairline separator between value blocks (sits in the gap).
-        p.setPen(QPen(with_alpha(kBorder, 0.9), 1.0));
+        p.setPen(QPen(with_alpha(theme::pal().border, 0.9), 1.0));
         p.drawLine(QPointF{x - 5.0, 14.0}, QPointF{x - 5.0, h - 14.0});
 
         if (hovered) {
-            p.setPen(with_alpha(kAccent, 0.30));
-            p.setBrush(with_alpha(kAccent, 0.08));
+            p.setPen(with_alpha(theme::pal().accent, 0.30));
+            p.setBrush(with_alpha(theme::pal().accent, 0.08));
             p.drawRoundedRect(area.adjusted(1.0, 6.0, -1.0, -6.0), 6, 6);
-            p.setPen(kMuted);
+            p.setPen(theme::pal().muted);
             p.setFont(label_font);
             p.drawText(area.adjusted(0.0, h - 18.0, 0.0, -1.0),
                        Qt::AlignHCenter | Qt::AlignTop, QString(hint));
         }
 
-        // Label row (top), value row (below it) — no overlap.
-        p.setPen(kMuted);
+        // Label row (top), value row (below it) — no overlap. The label
+        // box is 13px: drawText clips to the rect and the 9pt line box is
+        // ~14.2px, so the old 11px box grazed the cap tops.
+        p.setPen(theme::pal().muted);
         p.setFont(label_font);
-        p.drawText(QRectF{x, 9.0, block_w, 11.0},
+        p.drawText(QRectF{x, 9.0, block_w, 13.0},
                    Qt::AlignHCenter | Qt::AlignTop, QString(label));
 
-        p.setPen(kText);
+        p.setPen(theme::pal().text);
         p.setFont(value_font);
         p.drawText(QRectF{x, 21.0, block_w, 22.0},
                    Qt::AlignHCenter | Qt::AlignVCenter, value);
@@ -380,10 +391,10 @@ private:
     void paint_button(QPainter& p, QRectF const& btn, int index) {
         bool const hovered = btn_rects_[index].contains(mapFromGlobal(QCursor::pos()));
         bool active = false;
-        QColor accent = kAccent;
+        QColor accent = theme::pal().accent;
         if (index == 2) {  // record: pulses while recording
             active = engine_.recording();
-            accent = kRecord;
+            accent = theme::pal().record;
         } else if (index == 3) {  // metronome
             active = engine_.audio().transport_control().metronome_on.load(
                 std::memory_order_relaxed);
@@ -403,13 +414,13 @@ private:
             fill.setColorAt(0.0, with_alpha(accent, 0.34));
             fill.setColorAt(1.0, with_alpha(accent, 0.16));
         } else if (hovered) {
-            fill.setColorAt(0.0, QColor(0x2c, 0x31, 0x3b));
-            fill.setColorAt(1.0, QColor(0x21, 0x25, 0x2c));
+            fill.setColorAt(0.0, theme::shift(theme::pal().panel_top, 12));
+            fill.setColorAt(1.0, theme::shift(theme::pal().panel_top, 4));
         } else {
-            fill.setColorAt(0.0, QColor(0x24, 0x28, 0x30));
-            fill.setColorAt(1.0, QColor(0x1b, 0x1e, 0x24));
+            fill.setColorAt(0.0, theme::shift(theme::pal().panel_top, 6));
+            fill.setColorAt(1.0, theme::shift(theme::pal().panel_top, -4));
         }
-        p.setPen(QPen(active ? accent : kBorder, 1.2));
+        p.setPen(QPen(active ? accent : theme::pal().border, 1.2));
         p.setBrush(fill);
         p.drawRoundedRect(body, 8, 8);
         // Top-edge inner highlight for a slightly domed feel.
@@ -417,7 +428,7 @@ private:
         p.setBrush(Qt::NoBrush);
         p.drawRoundedRect(body.adjusted(1.5, 1.5, -1.5, -1.5), 7, 7);
 
-        QColor const icon = active ? accent : (hovered ? kText : kMuted);
+        QColor const icon = active ? accent : (hovered ? theme::pal().text : theme::pal().muted);
         p.setPen(Qt::NoPen);
         p.setBrush(icon);
         double const s = body.width();
@@ -439,7 +450,7 @@ private:
             double const r = s * 0.16 * pulse;
             p.drawEllipse(c, r, r);
             if (active) {
-                p.setPen(QPen(with_alpha(kRecord, 0.45), 1.5));
+                p.setPen(QPen(with_alpha(theme::pal().record, 0.45), 1.5));
                 p.setBrush(Qt::NoBrush);
                 p.drawEllipse(c, r + 3.0, r + 3.0);
             }
@@ -467,12 +478,15 @@ private:
         auto& ctrl = engine_.audio().transport_control();
         switch (index) {
         case 0:
-            ctrl.state_req.store(music::TransportControl::kReqPlay,
-                                 std::memory_order_release);
+            // Command route (not the raw state_req): play turns the
+            // metronome on by default like the hardware TransportPlay does.
+            engine_.command({mapping::Action::TransportPlay, 0, 0});
             break;
         case 1:
-            ctrl.state_req.store(music::TransportControl::kReqStop,
-                                 std::memory_order_release);
+            // Command route: TransportStop also flushes the recorder's
+            // pending notes and saves the project — the raw kReqStop the
+            // old button wrote silently skipped both.
+            engine_.command({mapping::Action::TransportStop, 0, 0});
             break;
         case 2:
             engine_.command({mapping::Action::TransportRecord, 0, 0});
@@ -509,13 +523,18 @@ private:
 // ===========================================================================
 MainWindow::MainWindow(app::PlayEngine& engine, QWidget* parent)
     : QMainWindow(parent), engine_(engine) {
-    setWindowTitle("addu94");
-    setMinimumSize(1280, 720);
-    // Deep near-black stage with a faint vertical falloff (matches
-    // theme::kBaseTop → kBaseBottom; panels float on top of this).
-    setStyleSheet(
-        "QMainWindow { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        " stop:0 #0d0f13, stop:1 #15171c); }");
+    setWindowTitle("Ghost Story");
+    // Small honest floor: the instrument must shrink with the screen
+    // (1366×768 laptops, tiling window managers) — the old 1280×720
+    // minimum didn't even fit those displays with decorations. 600 is the
+    // layout's true vertical floor (transport 64 + canvas 220 + mirror
+    // 252 + margins/gaps) — the advertised 560 was already unreachable
+    // and Qt silently squeezed the bottom row until texts collided. It
+    // grows freely above the floor, and F11 takes the whole display.
+    setMinimumSize(960, 600);
+    resize(1280, 720);
+    restore_window_state();
+    restyle();  // window background + app palette from the active theme
 
     auto* central = new QWidget(this);
     auto* root = new QVBoxLayout(central);
@@ -535,19 +554,30 @@ MainWindow::MainWindow(app::PlayEngine& engine, QWidget* parent)
     mid->addWidget(tracks_);
     arrangement_ = new ArrangementView(engine_, central);
     mid->addWidget(arrangement_, 1);
+    // Live-input channel strip (monitor + grab-to-pad), right of the
+    // canvas — the canvas gives up width gracefully and the bottom row
+    // stays uncluttered.
+    mic_panel_ = new MicPanel(engine_, central);
+    mic_panel_->set_grab_hook([this](int pad) {
+        mirror_->pulse_pad(pad);  // bank A pads are absolute 0..7
+    });
+    mid->addWidget(mic_panel_);
     root->addLayout(mid, 1);
 
     auto* bottom = new QHBoxLayout();
     bottom->setSpacing(theme::kPanelGap);
     mirror_ = new ControllerMirror(engine_, central);
     bottom->addWidget(mirror_, 1);
+    fx_panel_ = new FxPanel(engine_, central);
+    bottom->addWidget(fx_panel_, 1);
     health_ = new HealthStrip(engine_, central);
     bottom->addWidget(health_);
     root->addLayout(bottom);
 
     setCentralWidget(central);
 
-    // Keyboard: Space = play/stop, R = record, M = metronome.
+    // Keyboard: Space = play/stop, R = record, M = metronome,
+    // F11 = fullscreen (Esc exits).
     auto* space = new QShortcut(QKeySequence(Qt::Key_Space), this);
     connect(space, &QShortcut::activated, this, [this] { transport_->shortcut_play(); });
     auto* rec = new QShortcut(QKeySequence(Qt::Key_R), this);
@@ -555,6 +585,35 @@ MainWindow::MainWindow(app::PlayEngine& engine, QWidget* parent)
     auto* metro = new QShortcut(QKeySequence(Qt::Key_M), this);
     connect(metro, &QShortcut::activated, this,
             [this] { transport_->shortcut_metronome(); });
+    // Undo/redo live on the keyboard too (pads semantics v2 moved them off
+    // PLAY's bank B — drumming must never erase a take). UI-originated
+    // commands don't ride drain_app_events, so the mirror pulse happens
+    // right here.
+    auto* undo_sc = new QShortcut(QKeySequence::Undo, this);
+    connect(undo_sc, &QShortcut::activated, this, [this] {
+        engine_.command({mapping::Action::Undo, 0, 0});
+        mirror_->pulse_pad(8);  // B1
+    });
+    auto* redo_sc = new QShortcut(QKeySequence::Redo, this);
+    connect(redo_sc, &QShortcut::activated, this, [this] {
+        engine_.command({mapping::Action::Redo, 0, 0});
+        mirror_->pulse_pad(9);  // B2
+    });
+    // Window sizing: F11 toggles fullscreen anywhere (not every WM offers
+    // the menu entry, especially tiling ones); Esc leaves fullscreen the
+    // way media apps do. Size/maximized/fullscreen persist via QSettings
+    // (restore_window_state / save_window_state below).
+    auto* full = new QShortcut(QKeySequence(Qt::Key_F11), this);
+    connect(full, &QShortcut::activated, this, [this] {
+        if (isFullScreen()) {
+            showNormal();
+        } else {
+            showFullScreen();
+        }
+    });
+    auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(esc, &QShortcut::activated, this,
+            [this] { if (isFullScreen()) showNormal(); });
 
     ui_timer_id_ = startTimer(kUiTimerMs);
     tick();  // populate immediately (no blank first second)
@@ -568,7 +627,72 @@ void MainWindow::timerEvent(QTimerEvent* event) {
     }
 }
 
+void MainWindow::restyle() {
+    // Stage behind the panels: faint vertical falloff, palette-derived so
+    // a theme switch re-tints the whole window (QColor::name() = #rrggbb).
+    setStyleSheet(QString(
+        "QMainWindow { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        " stop:0 %1, stop:1 %2); }")
+        .arg(theme::pal().base_top.name(),
+             theme::pal().base_bottom.name()));
+    if (QApplication* app = qApp; app != nullptr) {
+        apply_app_palette(*app);  // combo popups, tooltips, dialogs
+    }
+    theme_generation_ = theme::generation();
+}
+
+void MainWindow::showEvent(QShowEvent* event) {
+    QMainWindow::showEvent(event);
+    // Geometry was restored in the constructor; the saved fullscreen
+    // request can only be applied once the window is visible.
+    if (!geometry_restored_) {
+        geometry_restored_ = true;
+        if (start_fullscreen_) {
+            showFullScreen();
+        }
+    }
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    save_window_state();
+    QMainWindow::closeEvent(event);
+}
+
+MainWindow::~MainWindow() {
+    // Also covers the GS_SHOT grab-then-quit path, which never reaches
+    // closeEvent. save_window_state() is idempotent and skips test runs.
+    save_window_state();
+}
+
+void MainWindow::restore_window_state() {
+    // Org/app names live on the QApplication (app_gui.cpp) — the default
+    // QSettings lands in ~/.config/ghost_story/ghost_story.ini.
+    QSettings settings;
+    QVariant const geometry = settings.value("window/geometry");
+    if (geometry.isValid()) {
+        restoreGeometry(geometry.toByteArray());
+    }
+    start_fullscreen_ = settings.value("window/fullscreen", false).toBool();
+}
+
+void MainWindow::save_window_state() {
+    // GS_SHOT offscreen test runs must not clobber the user's remembered
+    // size with whatever the headless grab produced.
+    if (std::getenv("GS_SHOT") != nullptr) {
+        return;
+    }
+    QSettings settings;
+    settings.setValue("window/geometry", saveGeometry());
+    settings.setValue("window/fullscreen", isFullScreen());
+}
+
 void MainWindow::tick() {
+    // 0. Theme switch? One repaint + palette/stylesheet refresh, then
+    // back to the normal 30 Hz duty cycle.
+    if (theme::generation() != theme_generation_) {
+        restyle();
+    }
+
     // 1. Drain app events (mapping + recorder). Pad actions carry a
     // pad index — bank A notes 36..43 are DrumPad (absolute 0..7), bank
     // B utilities/chord-slots are 8..15. Every pad hit pulses its own
@@ -576,36 +700,39 @@ void MainWindow::tick() {
     for (auto const& c : engine_.drain_app_events()) {
         using A = mapping::Action;
         if (c.action == A::DrumPad) {
-            mirror_->pulse_pad(c.param);              // bank A: 0..7
+            mirror_->pulse_pad(c.param);              // absolute 0..15
         } else if (c.action == A::ChordSlot) {
             mirror_->pulse_pad(10 + c.param);         // slots on B3..B8
         } else if (c.action == A::Undo || c.action == A::Redo) {
             mirror_->pulse_pad(c.action == A::Undo ? 8 : 9);  // B1/B2
         } else if (c.action == A::TrackSelect) {
             mirror_->pulse_pad(c.param);              // bank A rows
+        } else if (c.action == A::PadPackSelect) {
+            mirror_->pulse_pad(c.param);              // pack 0..15
         }
     }
 
-    // 2. Feed the current clip as the selected track's arrangement block.
-    // Deduped on length_ticks so view-state drags/extensions survive.
-    auto const& ctrl = engine_.audio().transport_control();
-    std::int64_t const clip_ticks = engine_.current_clip().length_ticks;
-    if (clip_ticks != last_clip_len_) {
-        last_clip_len_ = clip_ticks;
-        double const beats_per_bar =
-            static_cast<double>(ctrl.meter_num.load(std::memory_order_relaxed));
-        int const bars = std::max(
-            1, static_cast<int>(std::lround(
-                   static_cast<double>(clip_ticks) / (kPpq * beats_per_bar))));
-        arrangement_->set_clip_block(engine_.selected_track(), bars);
+    // 2. Feed each active track's real takes (per-take boxes) + reserved
+    // window to the arrangement canvas. The canvas moves/resizes/clears
+    // takes through the engine; the next tick reflects the engine truth —
+    // no view-state copies to keep in sync. Blocks of removed tracks are
+    // pruned inside the canvas's refresh().
+    int const n_tracks = engine_.track_count();
+    for (int t = 0; t < n_tracks; ++t) {
+        arrangement_->set_track_clips(t, engine_.clip_boxes(t),
+                                      engine_.clip_start_bar(t),
+                                      engine_.clip_bars(t),
+                                      engine_.clip_has_notes(t));
     }
 
     // 3. Views.
     transport_->ui_tick();
     tracks_->refresh();
     arrangement_->refresh();
+    mic_panel_->refresh();
     mirror_->refresh();
+    fx_panel_->refresh();
     health_->refresh();
 }
 
-}  // namespace addu94::ui
+}  // namespace ghost_story::ui

@@ -1,8 +1,8 @@
-// addu94 — src/device/manifest.hpp
+// ghost_story — src/device/manifest.hpp
 //
 // Device manifest: the data file that makes an MPK variant "a data file,
 // not a code change" (spec §1). Produced by the runtime probe at first run,
-// stored under ~/.local/share/addu94/devices/, versioned, checksummed.
+// stored under ~/.local/share/ghost_story/devices/, versioned, checksummed.
 //
 // The manifest deliberately records *what we observed* (ports, models,
 // capabilities, captured control usage) separately from the *assumed*
@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::device {
+namespace ghost_story::device {
 
 constexpr int kManifestSchema = 1;
 
@@ -64,7 +64,7 @@ std::string manifest_to_json(Manifest const& m);
 /// quarantines the file and re-probes).
 std::optional<Manifest> manifest_from_json(std::string const& json);
 
-/// Standard path: ~/.local/share/addu94/devices/device_manifest.json
+/// Standard path: ~/.local/share/ghost_story/devices/device_manifest.json
 std::filesystem::path manifest_path();
 /// Atomic write (temp + fsync + rename); returns false on I/O failure.
 bool save_manifest(Manifest const& m, std::filesystem::path const& path);
@@ -78,4 +78,4 @@ bool quarantine_file(std::filesystem::path const& path);
 [[nodiscard]] std::optional<Control::Kind> control_kind_from_string(
     std::string const& s);
 
-}  // namespace addu94::device
+}  // namespace ghost_story::device

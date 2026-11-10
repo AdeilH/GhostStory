@@ -1,4 +1,4 @@
-// addu94 — src/audio/engine.cpp
+// ghost_story — src/audio/engine.cpp
 #include "audio/engine.hpp"
 
 #include "log/logger.hpp"
@@ -8,7 +8,7 @@
 #include <ctime>
 #include <vector>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 AudioEngine::AudioEngine() { transport_.set_sample_rate(48000); }
 
@@ -164,4 +164,4 @@ std::size_t AudioEngine::bench_drain(TimingSample* out,
     return n;
 }
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

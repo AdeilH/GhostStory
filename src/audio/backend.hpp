@@ -1,4 +1,4 @@
-// addu94 — src/audio/backend.hpp
+// ghost_story — src/audio/backend.hpp
 //
 // Audio backend contract (spec §3). The audio callback does NO allocation,
 // no locks, no syscalls, no logging (prime directive). Backends drive the
@@ -14,8 +14,9 @@
 #include <string>
 #include <vector>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
+class CaptureRing;
 using Sample = float;
 
 /// Per-callback statistics (written by the RT thread via atomics, read by
@@ -49,6 +50,12 @@ struct BackendConfig {
     std::uint32_t sample_rate{48000};
     std::uint32_t buffer_size{512};   // frames; 0 = device default
     std::string device;               // empty = default device
+    /// Live-input sink (audio/capture_ring.hpp). When non-null, a backend
+    /// that CAN capture opens an input path (JACK input ports, a PipeWire
+    /// capture stream, an ALSA capture thread) and pushes frames here;
+    /// backends without capture support ignore it. The ring is owned by
+    /// the caller and must outlive the backend.
+    CaptureRing* capture_ring{nullptr};
 };
 
 class AudioBackend {
@@ -82,4 +89,4 @@ public:
 /// Caller owns the pointers.
 std::vector<std::unique_ptr<AudioBackend>> make_backends();
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

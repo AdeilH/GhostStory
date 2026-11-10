@@ -21,7 +21,7 @@
       "status": "pass"
     },
     {
-      "detail": "RT bandwidth throttled (1000000 µs/s) — audio threads still OK, addu94 uses normal scheduling for MIDI",
+      "detail": "RT bandwidth throttled (1000000 µs/s) — audio threads still OK, ghost_story uses normal scheduling for MIDI",
       "name": "realtime limits",
       "status": "warn"
     },

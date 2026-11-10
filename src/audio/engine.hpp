@@ -1,4 +1,4 @@
-// addu94 — src/audio/engine.hpp
+// ghost_story — src/audio/engine.hpp
 //
 // AudioEngine: owns the backend selection (PipeWire → fallbacks), the
 // transport, and the top-level render callback (metronome for M2; mixer +
@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 class AudioEngine {
 public:
@@ -88,4 +88,4 @@ private:
     std::atomic<bool> bench_recording_{false};
 };
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

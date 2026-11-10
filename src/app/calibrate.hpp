@@ -1,9 +1,9 @@
-// addu94 — src/app/calibrate.hpp
+// ghost_story — src/app/calibrate.hpp
 #pragma once
 
-namespace addu94::app {
+namespace ghost_story::app {
 
-/// `addu94 calibrate`: interactive knob CC mapping -> profile.toml.
+/// `ghost_story calibrate`: interactive knob CC mapping -> profile.toml.
 int cmd_calibrate(char const* output_path);
 
-}  // namespace addu94::app
+}  // namespace ghost_story::app

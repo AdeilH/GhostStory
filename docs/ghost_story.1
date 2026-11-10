@@ -1,22 +1,26 @@
-.\" addu94 man page
-.TH ADDU94 1 "2026-11-04" "addu94 0.1.0" "User Commands"
+.\" ghost_story man page
+.TH GHOST_STORY 1 "2026-11-04" "Ghost Story 0.1.0" "User Commands"
 .SH NAME
-addu94 \- self-healing song builder for the Akai MPK Mini on Linux
+ghost_story \- self-healing song builder for the Akai MPK Mini on Linux
 .SH SYNOPSIS
-.B addu94
+.B ghost_story
 <command> [options]
 .SH DESCRIPTION
-.B addu94
-turns an Akai MPK Mini (mk1/mk2/mk3/Play, detected at runtime) plus a Linux
+.B ghost_story
+(Ghost Story) turns an Akai MPK Mini (mk1/mk2/mk3/Play, detected at runtime) plus a Linux
 box with PipeWire into a complete song-building instrument: play keys and
 pads, record loops with quantize and overdub, arrange patterns into a song,
 mix with the hardware knobs, and export stems. No AI at runtime, no cloud,
 no accounts.
 .SH COMMANDS
 .TP
-.B play [\-\-headless] [\-\-seconds N] [\-\-project-dir DIR]
+.B play [\-\-headless] [\-\-seconds N] [\-\-project-dir DIR] [\-\-log-file PATH] [\-\-no-log-file]
 Launch the app. Default is the native Qt6 window; \-\-headless runs the
 engine without a display (CI / servers). \-\-seconds auto-stops.
+Structured JSONL logs are appended to
+.IR ~/.local/share/ghost_story/logs/app.jsonl ;
+\-\-log-file overrides the path, \-\-no-log-file keeps stderr-only logging
+(GHOST_STORY_LOG_FILE=0 does the same; any other value is a path).
 .TP
 .B doctor
 Self-diagnosis: audio backend, MIDI ports, device manifest, disk space,
@@ -37,7 +41,7 @@ xruns; the default budget run is 300 s.
 .TP
 .B probe [\-\-capture]
 Detect MIDI devices and write the checksummed device manifest to
-.IR ~/.local/share/addu94/devices/device_manifest.json .
+.IR ~/.local/share/ghost_story/devices/device_manifest.json .
 \-\-capture records 60 s of raw traffic (SysEx RE work).
 .TP
 .B export \-\-project-dir DIR (\-\-smf OUT.mid | \-\-wav-dir DIR)
@@ -48,16 +52,22 @@ plus master mix (32-bit float WAV; master equals the sum of stems).
 Print version.
 .SH FILES
 .TP
-.I ~/.local/share/addu94/devices/device_manifest.json
+.I ~/.local/share/ghost_story/devices/device_manifest.json
 Detected device capabilities (checksummed, schema-versioned).
 .TP
-.I ~/.local/share/addu94/crashes/
+.I ~/.local/share/ghost_story/crashes/
 Crash reports + safe-mode flag.
 .TP
-.I ~/.local/share/addu94/telemetry/sessions.jsonl
+.I ~/.local/share/ghost_story/telemetry/sessions.jsonl
 Local-only session telemetry. Set
-.B ADDU94_TELEMETRY=0
+.B GHOST_STORY_TELEMETRY=0
 to disable all writes.
+.TP
+.I ~/.local/share/ghost_story/logs/app.jsonl
+Structured JSONL run log (rotates at 32 MiB, previous file kept as
+.I app.jsonl.1 ).
+Ship it to the development Kibana stack with
+.IR make\ elk-up (deploy/elk/).
 .TP
 .I <project-dir>/project.journal
 Write-ahead log; crash-safe with per-append fsync.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# addu94 — scripts/test_soak.sh
+# ghost_story — scripts/test_soak.sh
 # Spec §11 soak gate: scripted long-run session — concurrent recording
 # (journaling), MIDI fuzz storm, and a live bench stream — asserting zero
 # xruns, zero lost events, and a clean final project load.
@@ -9,8 +9,8 @@ set -uo pipefail
 MINUTES="${1:-30}"
 SECONDS_TOTAL=$((MINUTES * 60))
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN="$ROOT/build/main/addu94"
-DIR=$(mktemp -d /tmp/addu94_soak.XXXXXX)
+BIN="$ROOT/build/main/ghost_story"
+DIR=$(mktemp -d /tmp/ghost_story_soak.XXXXXX)
 trap 'kill 2>/dev/null; rm -rf "$DIR"' EXIT
 
 echo "soak: ${MINUTES} min scripted session (record + fuzz + bench)"

@@ -1,8 +1,10 @@
-// addu94 — src/audio/pipewire_backend.cpp
+// ghost_story — src/audio/pipewire_backend.cpp
 #include "audio/pipewire_backend.hpp"
 
+#include "audio/capture_ring.hpp"
 #include "log/logger.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -10,7 +12,7 @@
 #include <thread>
 #include <ctime>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 namespace {
 
@@ -56,8 +58,26 @@ const struct pw_stream_events& PipeWireBackend::stream_events() noexcept {
     return events;
 }
 
+const struct pw_stream_events&
+    PipeWireBackend::capture_stream_events() noexcept {
+    static const struct pw_stream_events events = [] {
+        struct pw_stream_events ev{};
+        ev.version = PW_VERSION_STREAM_EVENTS;
+        ev.process = &PipeWireBackend::on_capture_process_thunk;
+        return ev;
+    }();
+    return events;
+}
+
 void PipeWireBackend::on_process_thunk(void* arg) noexcept {
+    // PipeWire owns this thread — label it so its log lines show "audio".
+    ghost_story::log::Logger::set_thread_name("audio");
     static_cast<PipeWireBackend*>(arg)->handle_process();
+}
+
+void PipeWireBackend::on_capture_process_thunk(void* arg) noexcept {
+    ghost_story::log::Logger::set_thread_name("audio");
+    static_cast<PipeWireBackend*>(arg)->handle_capture_process();
 }
 
 void PipeWireBackend::on_state_changed_thunk(void* arg,
@@ -80,7 +100,7 @@ bool PipeWireBackend::open(BackendConfig const& cfg, std::string& reason) {
     if (stream_ != nullptr) close();
     (void)available();  // ensure pw_init ran before any PipeWire call
 
-    auto* loop = pw_thread_loop_new("addu94-audio", nullptr);
+    auto* loop = pw_thread_loop_new("ghost_story-audio", nullptr);
     if (loop == nullptr) {
         reason = "pw_thread_loop_new failed";
         log::warn("audio", "open failed: {}", reason);
@@ -88,8 +108,8 @@ bool PipeWireBackend::open(BackendConfig const& cfg, std::string& reason) {
     }
 
     pw_properties* props = pw_properties_new(
-        PW_KEY_NODE_NAME, "addu94",             //
-        PW_KEY_NODE_DESCRIPTION, "addu94",      //
+        PW_KEY_NODE_NAME, "ghost_story",             //
+        PW_KEY_NODE_DESCRIPTION, "ghost_story",      //
         PW_KEY_MEDIA_TYPE, "Audio",             //
         PW_KEY_MEDIA_CATEGORY, "Playback",      //
         static_cast<const char*>(nullptr));
@@ -109,7 +129,7 @@ bool PipeWireBackend::open(BackendConfig const& cfg, std::string& reason) {
 
     // pw_stream_new_simple consumes `props` (frees them on failure too).
     auto* stream = pw_stream_new_simple(pw_thread_loop_get_loop(loop),
-                                        "addu94", props, &stream_events(),
+                                        "ghost_story", props, &stream_events(),
                                         this);
     if (stream == nullptr) {
         reason = "pw_stream_new_simple failed";
@@ -146,6 +166,63 @@ bool PipeWireBackend::open(BackendConfig const& cfg, std::string& reason) {
     loop_ = loop;
     stream_ = stream;
     cfg_ = cfg;
+
+    // Live mic: a second stream, same loop (single data thread → the
+    // capture ring's single-producer guarantee holds). Any failure here
+    // downgrades to playback-only with a warning — the mixer must play.
+    capture_ring_ = cfg.capture_ring;
+    capture_stream_ = nullptr;
+    if (capture_ring_ != nullptr) {
+        pw_properties* cprops = pw_properties_new(
+            PW_KEY_NODE_NAME, "ghost_story-mic",              //
+            PW_KEY_NODE_DESCRIPTION, "ghost_story mic",       //
+            PW_KEY_MEDIA_TYPE, "Audio",                  //
+            PW_KEY_MEDIA_CATEGORY, "Capture",            //
+            PW_KEY_MEDIA_ROLE, "Music",                  //
+            static_cast<const char*>(nullptr));
+        if (cprops != nullptr && cfg.buffer_size != 0 && cfg.sample_rate != 0) {
+            pw_properties_setf(cprops, PW_KEY_NODE_LATENCY, "%u/%u",
+                               cfg.buffer_size, cfg.sample_rate);
+        }
+        auto* cstream = cprops == nullptr
+                            ? nullptr
+                            : pw_stream_new_simple(pw_thread_loop_get_loop(loop),
+                                                   "ghost_story-mic", cprops,
+                                                   &capture_stream_events(),
+                                                   this);
+        if (cstream == nullptr) {
+            log::warn("audio",
+                      "pipewire capture stream creation failed — mic "
+                      "disabled (playback continues)");
+            capture_ring_ = nullptr;
+        } else {
+            struct spa_audio_info_raw craw{};
+            craw.format = SPA_AUDIO_FORMAT_F32P;
+            craw.rate = raw.rate;
+            craw.channels = 2;
+            craw.position[0] = SPA_AUDIO_CHANNEL_FL;
+            craw.position[1] = SPA_AUDIO_CHANNEL_FR;
+            struct spa_pod_builder cbuilder{};
+            spa_pod_builder_init(&cbuilder, capture_pod_buffer_.data(),
+                                 static_cast<std::uint32_t>(
+                                     capture_pod_buffer_.size()));
+            capture_params_[0] = spa_format_audio_raw_ext_build(
+                &cbuilder, SPA_PARAM_EnumFormat, &craw, sizeof(craw));
+            if (capture_params_[0] == nullptr) {
+                log::warn("audio",
+                          "pipewire capture format build failed — mic "
+                          "disabled (playback continues)");
+                pw_stream_destroy(cstream);
+                capture_ring_ = nullptr;
+            } else {
+                capture_stream_ = cstream;
+                log::info("audio",
+                          "pipewire capture stream created (auto-link to "
+                          "default source on start)");
+            }
+        }
+    }
+
     stats_.sample_rate.store(raw.rate, std::memory_order_relaxed);
     stats_.buffer_size.store(cfg.buffer_size, std::memory_order_relaxed);
     log::info("audio", "pipewire backend open: rate={} buffer={} (0=device)",
@@ -163,6 +240,12 @@ void PipeWireBackend::close() noexcept {
         pw_stream_disconnect(stream_);
         pw_stream_destroy(stream_);
         stream_ = nullptr;
+        if (capture_stream_ != nullptr) {
+            pw_stream_set_active(capture_stream_, false);
+            pw_stream_disconnect(capture_stream_);
+            pw_stream_destroy(capture_stream_);
+            capture_stream_ = nullptr;
+        }
         pw_thread_loop_unlock(loop_);
         pw_thread_loop_stop(loop_);
         loop_started_.store(false);
@@ -170,11 +253,16 @@ void PipeWireBackend::close() noexcept {
         // Loop never started: no concurrent event dispatch, destroy directly.
         pw_stream_destroy(stream_);
         stream_ = nullptr;
+        if (capture_stream_ != nullptr) {
+            pw_stream_destroy(capture_stream_);
+            capture_stream_ = nullptr;
+        }
     }
     if (loop_ != nullptr) {
         pw_thread_loop_destroy(loop_);
         loop_ = nullptr;
     }
+    capture_ring_ = nullptr;
     running_.store(false, std::memory_order_release);
     connect_error_.store(false, std::memory_order_relaxed);
     pending_xrun_.store(false, std::memory_order_relaxed);
@@ -220,6 +308,26 @@ bool PipeWireBackend::start() {
         log::warn("audio", "pw_stream_connect failed: {}",
                   spa_strerror(rc));
         return false;
+    }
+
+    // Capture stream: connect in the same direction-INPUT pass; failure
+    // only disables the mic, never playback (the wait below still keys on
+    // the PLAYBACK stream reaching STREAMING).
+    if (capture_stream_ != nullptr) {
+        pw_thread_loop_lock(loop_);
+        int const crc = pw_stream_connect(
+            capture_stream_, PW_DIRECTION_INPUT, PW_ID_ANY,
+            static_cast<enum pw_stream_flags>(PW_STREAM_FLAG_RT_PROCESS |
+                                              PW_STREAM_FLAG_MAP_BUFFERS |
+                                              PW_STREAM_FLAG_AUTOCONNECT),
+            capture_params_.data(),
+            static_cast<std::uint32_t>(capture_params_.size()));
+        pw_thread_loop_unlock(loop_);
+        if (crc < 0) {
+            log::warn("audio",
+                      "pipewire capture connect failed: {} — mic disabled",
+                      spa_strerror(crc));
+        }
     }
 
     // Wait (non-RT thread) for the state hook to report STREAMING or ERROR.
@@ -332,6 +440,50 @@ void PipeWireBackend::handle_process() noexcept {
     }
 }
 
+void PipeWireBackend::handle_capture_process() noexcept {
+    // RT data thread (same loop as playback): pull the captured planes,
+    // push into the ring, requeue. No allocation, no locks, no logging.
+    struct pw_buffer* b = pw_stream_dequeue_buffer(capture_stream_);
+    if (b == nullptr) return;  // graph starving — skip this cycle
+    struct spa_buffer* buf = b->buffer;
+    // SPA capture contract: the valid samples live at
+    // data + chunk->offset (BYTES) .. + chunk->size. Reading from
+    // data[0] instead returns stale ring memory — periodic bursts of
+    // garbage every graph cycle, i.e. the scratch the mic monitor fed
+    // the master. Honor the offset and clamp to what the plane holds.
+    if (!plane_is_usable(buf, 0) || buf->datas[0].chunk->offset >
+                                        buf->datas[0].maxsize) {
+        pw_stream_queue_buffer(capture_stream_, b);
+        return;
+    }
+    auto* plane = static_cast<std::byte*>(buf->datas[0].data) +
+                  buf->datas[0].chunk->offset;
+    auto* left = reinterpret_cast<Sample*>(plane);
+    std::size_t const plane_samples =
+        (buf->datas[0].maxsize - buf->datas[0].chunk->offset) /
+        sizeof(Sample);
+    std::uint32_t const frames = static_cast<std::uint32_t>(
+        std::min<std::size_t>(buf->datas[0].chunk->size / sizeof(Sample),
+                              plane_samples));
+    if (frames > 0) {
+        if (plane_is_usable(buf, 1)) {
+            auto* right = reinterpret_cast<Sample*>(
+                static_cast<std::byte*>(buf->datas[1].data) +
+                buf->datas[1].chunk->offset);
+            capture_ring_->push(left, right, frames);
+        } else {
+            // Mono source (laptop mic, mono USB): PipeWire negotiated one
+            // channel — duplicate it into both ring planes instead of
+            // dropping every cycle (the old both-planes-required check
+            // made capture silently dead on mono sources). push() reads
+            // the L and R pointers independently, so the same pointer is
+            // safe and allocation-free.
+            capture_ring_->push(left, left, frames);
+        }
+    }
+    pw_stream_queue_buffer(capture_stream_, b);
+}
+
 void PipeWireBackend::record_xrun() noexcept {
     stats_.xruns.fetch_add(1, std::memory_order_relaxed);
     pending_xrun_.store(true, std::memory_order_release);
@@ -376,4 +528,4 @@ void PipeWireBackend::handle_state_changed(enum pw_stream_state state,
 
 PipeWireBackend::~PipeWireBackend() { close(); }
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

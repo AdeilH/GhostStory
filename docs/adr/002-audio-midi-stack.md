@@ -5,7 +5,7 @@
 
 ## Context
 
-addu94 needs: (a) raw MIDI from the MPK Mini with low, measurable latency;
+Ghost Story needs: (a) raw MIDI from the MPK Mini with low, measurable latency;
 (b) audio output via PipeWire with JACK/ALSA fallbacks; (c) strict realtime
 safety in the audio callback; (d) virtual MIDI ports for hardware-free tests.
 
@@ -20,7 +20,7 @@ safety in the audio callback; (d) virtual MIDI ports for hardware-free tests.
 2. **Audio:** **PipeWire native API** (`libpipewire-0.3`, have 1.6.9) as the
    default graph; **JACK API** fallback (libjack present); **ALSA PCM**
    last resort. Backend selected at runtime by probing availability, overridable
-   via `~/.config/addu94/config.toml`.
+   via `~/.config/ghost_story/config.toml`.
 3. **DSP & synth:** hand-rolled, self-contained (spec §4). No external synth
    hosting. SFZ parsing and sample loading are built in-house over M6
    (`sfizz` as a library may be adopted only if a vendored, offline build is

@@ -1,4 +1,4 @@
-// addu94 — src/audio/render_engine.cpp
+// ghost_story — src/audio/render_engine.cpp
 //
 // Offline renderer (see render_engine.hpp). Walks the clip timeline
 // sample-exactly: events are placed at llround(tick * (60/bpm) / PPQ * sr)
@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 namespace {
 
 constexpr double kPPQ = 96.0;   // music::kPPQ as double
@@ -65,10 +65,15 @@ RenderResult render_track(RenderRequest const& req, int loop_count) {
                          return a->tick < b->tick;
                      });
 
+    // Placement: the clip's tick 0 sits at start_tick — exported audio
+    // matches what the live engine plays (silence before, loop after).
+    std::uint64_t const start_offset = static_cast<std::uint64_t>(
+        std::llround(static_cast<double>(clip->start_tick) * ticks_to_samples));
+
     std::vector<ScheduledEvent> evs;
     evs.reserve(sorted.size() * static_cast<std::size_t>(loop_count));
     for (std::uint64_t l = 0; l < loops; ++l) {
-        std::uint64_t const base = l * loop_samples;
+        std::uint64_t const base = start_offset + l * loop_samples;
         for (music::ClipEvent const* e : sorted) {
             auto const pos = static_cast<std::uint64_t>(std::llround(
                 static_cast<double>(e->tick) * ticks_to_samples));
@@ -81,8 +86,9 @@ RenderResult render_track(RenderRequest const& req, int loop_count) {
         }
     }
 
-    out.left.assign(static_cast<std::size_t>(total), 0.0f);
-    out.right.assign(static_cast<std::size_t>(total), 0.0f);
+    auto const total_with_offset = total + start_offset;
+    out.left.assign(static_cast<std::size_t>(total_with_offset), 0.0f);
+    out.right.assign(static_cast<std::size_t>(total_with_offset), 0.0f);
 
     Synth synth;
     synth.set_sample_rate(sr);
@@ -152,4 +158,4 @@ RenderResult mix_down(std::vector<RenderResult> const& stems) {
     return out;
 }
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

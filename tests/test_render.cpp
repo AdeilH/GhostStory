@@ -1,4 +1,4 @@
-// addu94 — tests/test_render.cpp
+// ghost_story — tests/test_render.cpp
 //
 // FX chain + offline renderer + WAV export tests (spec §2.7, M6 gates).
 // Includes the M6 gate test named exactly "render.master_equals_sum_of_stems".
@@ -21,14 +21,14 @@
 #include <unistd.h>
 #include <vector>
 
-using addu94::audio::FxChain;
-using addu94::audio::FxParams;
-using addu94::audio::RenderRequest;
-using addu94::audio::RenderResult;
-using addu94::audio::SynthParams;
-using addu94::music::Clip;
-using addu94::music::ClipEvent;
-using addu94::project::ExportSpec;
+using ghost_story::audio::FxChain;
+using ghost_story::audio::FxParams;
+using ghost_story::audio::RenderRequest;
+using ghost_story::audio::RenderResult;
+using ghost_story::audio::SynthParams;
+using ghost_story::music::Clip;
+using ghost_story::music::ClipEvent;
+using ghost_story::project::ExportSpec;
 
 namespace {
 
@@ -135,7 +135,7 @@ bool read_wav_f32(std::string const& path, WavData& out) {
 
 std::filesystem::path make_temp_dir() {
     std::filesystem::path p = std::filesystem::temp_directory_path() /
-                              ("addu94_test_render_" +
+                              ("ghost_story_test_render_" +
                                std::to_string(static_cast<long>(::getpid())));
     std::error_code ec;
     std::filesystem::remove_all(p, ec);
@@ -292,8 +292,8 @@ TEST(render, deterministic_bit_identical) {
         },
         96 * 4);
     RenderRequest req = make_request(&clip);
-    auto a = addu94::audio::render_track(req, 3);
-    auto b = addu94::audio::render_track(req, 3);
+    auto a = ghost_story::audio::render_track(req, 3);
+    auto b = ghost_story::audio::render_track(req, 3);
     CHECK_EQ(a.left.size(), b.left.size());
     CHECK(a.left == b.left);
     CHECK(a.right == b.right);
@@ -303,7 +303,7 @@ TEST(render, silent_clip_is_silent) {
     Clip clip;  // no events
     clip.length_ticks = 96 * 4;
     RenderRequest req = make_request(&clip);
-    auto out = addu94::audio::render_track(req, 2);
+    auto out = ghost_story::audio::render_track(req, 2);
     CHECK_EQ(out.left.size(), out.right.size());
     // 96*4 ticks = 4 beats = 2 s = 96000 samples @ 48 kHz; x2 loops.
     CHECK_EQ(out.left.size(), std::size_t{192000});
@@ -323,7 +323,7 @@ TEST(render, note_at_tick_0_sounds) {
         },
         96 * 4);
     RenderRequest req = make_request(&clip);
-    auto out = addu94::audio::render_track(req, 1);
+    auto out = ghost_story::audio::render_track(req, 1);
     float peak = 0.0f;
     for (float v : out.left) {
         peak = std::max(peak, std::fabs(v));
@@ -341,10 +341,10 @@ TEST(render, no_clip_or_zero_loops_is_empty) {
     Clip clip;
     clip.length_ticks = 96;
     RenderRequest req = make_request(&clip);
-    CHECK(addu94::audio::render_track(req, 0).left.empty());
+    CHECK(ghost_story::audio::render_track(req, 0).left.empty());
     RenderRequest none = req;
     none.clip = nullptr;
-    CHECK(addu94::audio::render_track(none, 1).left.empty());
+    CHECK(ghost_story::audio::render_track(none, 1).left.empty());
 }
 
 TEST(render, loop_count_extends_length) {
@@ -352,8 +352,8 @@ TEST(render, loop_count_extends_length) {
                            ClipEvent{95, 0, 60, 0, false, 0}},
                           96);
     RenderRequest req = make_request(&clip);
-    auto one = addu94::audio::render_track(req, 1);
-    auto four = addu94::audio::render_track(req, 4);
+    auto one = ghost_story::audio::render_track(req, 1);
+    auto four = ghost_story::audio::render_track(req, 4);
     CHECK_EQ(one.left.size(), std::size_t{24000});   // 1 beat @ 120 bpm = 0.5 s
     CHECK_EQ(four.left.size(), std::size_t{96000});
     // Loops must repeat once steady state is reached: loop 1 starts from
@@ -378,9 +378,9 @@ TEST(render, master_equals_sum_of_stems) {
     RenderRequest ra = make_request(&a);
     RenderRequest rb = make_request(&b);
     std::vector<RenderResult> stems;
-    stems.push_back(addu94::audio::render_track(ra, 1));
-    stems.push_back(addu94::audio::render_track(rb, 1));
-    auto master = addu94::audio::mix_down(stems);
+    stems.push_back(ghost_story::audio::render_track(ra, 1));
+    stems.push_back(ghost_story::audio::render_track(rb, 1));
+    auto master = ghost_story::audio::mix_down(stems);
     CHECK_EQ(master.left.size(), stems[0].left.size());
     double worst = 0.0;
     for (std::size_t i = 0; i < master.left.size(); ++i) {
@@ -417,7 +417,7 @@ TEST(export, writes_stems_and_master) {
     spec.loop_count = 1;
 
     std::string error;
-    bool const ok = addu94::project::export_wav_stems(spec, error);
+    bool const ok = ghost_story::project::export_wav_stems(spec, error);
     CHECK(ok);
     if (!ok) {
         std::fprintf(stderr, "  export error: %s\n", error.c_str());
@@ -462,9 +462,9 @@ TEST(export, writes_stems_and_master) {
 
 TEST(export, empty_spec_fails_with_error) {
     ExportSpec spec;
-    spec.output_dir = "/tmp/addu94_test_render_empty_spec";
+    spec.output_dir = "/tmp/ghost_story_test_render_empty_spec";
     std::string error;
-    CHECK(!addu94::project::export_wav_stems(spec, error));
+    CHECK(!ghost_story::project::export_wav_stems(spec, error));
     CHECK(!error.empty());
 }
 

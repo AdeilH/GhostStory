@@ -1,4 +1,4 @@
-// addu94 — src/project/journal.hpp
+// ghost_story — src/project/journal.hpp
 //
 // Write-ahead journal for the project document (spec §6.3). Every edit is
 // appended to <dir>/project.journal as one JSON line and fsynced before it
@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::project {
+namespace ghost_story::project {
 
 // One journaled edit. ops are small, forward-only, and replayable.
 enum class JournalOp : std::uint8_t {
@@ -47,6 +47,9 @@ enum class JournalOp : std::uint8_t {
     // (the clip slot is created on demand when missing).
     ClipRecord,
     ClipClear,        // i = track index, f = clip index (no-op if absent)
+    // i = track index, f = start tick (placement; drag-to-move in the
+    // arrangement). No-op if the clip slot is absent.
+    ClipMove,
 };
 
 struct JournalEntry {
@@ -114,4 +117,4 @@ private:
 /// inspect Journal::entries() after a load if they need it.
 bool load_project(std::string const& dir, Project& out, std::string& error);
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

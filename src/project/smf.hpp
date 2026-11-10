@@ -1,4 +1,4 @@
-// addu94 — src/project/smf.hpp
+// ghost_story — src/project/smf.hpp
 //
 // Standard MIDI File (type 1) export (spec §2.7): header + tempo track +
 // one track per clip. 96 PPQ ticks map 1:1 to our internal grid. Big-endian
@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::project {
+namespace ghost_story::project {
 
 /// Export one clip as an SMF type-1 byte buffer.
 /// `tempo_bpm` writes a single tempo event on track 0.
@@ -22,4 +22,4 @@ namespace addu94::project {
 bool write_smf_file(std::string const& path,
                     std::vector<std::uint8_t> const& bytes);
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

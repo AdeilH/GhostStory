@@ -1,13 +1,13 @@
-// addu94 — tests/test_arp.cpp
+// ghost_story — tests/test_arp.cpp
 #include "test_framework.hpp"
 
 #include "music/arp.hpp"
 
 #include <set>
 
-using addu94::music::Arp;
-using addu94::music::ArpMode;
-using addu94::music::NoteRepeat;
+using ghost_story::music::Arp;
+using ghost_story::music::ArpMode;
+using ghost_story::music::NoteRepeat;
 
 TEST(arp, up_walks_sorted_pool) {
     Arp a;

@@ -1,4 +1,4 @@
-// addu94 — src/project/journal.cpp
+// ghost_story — src/project/journal.cpp
 #include "project/journal.hpp"
 
 // See document.cpp: vendored nlohmann uses std::is_trivial (deprecated in
@@ -20,7 +20,7 @@
 #include <string_view>
 #include <utility>
 
-namespace addu94::project {
+namespace ghost_story::project {
 
 namespace {
 
@@ -38,6 +38,7 @@ char const* op_name(JournalOp op) noexcept {
     case JournalOp::SetTrackParam: return "set_track_param";
     case JournalOp::ClipRecord: return "clip_record";
     case JournalOp::ClipClear: return "clip_clear";
+    case JournalOp::ClipMove: return "clip_move";
     }
     return "?";
 }
@@ -53,6 +54,7 @@ char const* op_name(JournalOp op) noexcept {
     if (name == "set_track_param") { out = JournalOp::SetTrackParam; return true; }
     if (name == "clip_record") { out = JournalOp::ClipRecord; return true; }
     if (name == "clip_clear") { out = JournalOp::ClipClear; return true; }
+    if (name == "clip_move") { out = JournalOp::ClipMove; return true; }
     return false;
 }
 
@@ -307,6 +309,20 @@ std::uint64_t now_ns() noexcept {
         }
         return true;
     }
+    case JournalOp::ClipMove: {
+        if (e.i < 0 || static_cast<std::size_t>(e.i) >= p.tracks.size()) {
+            error = "clip_move: track index out of range";
+            return false;
+        }
+        Track& t = p.tracks[static_cast<std::size_t>(e.i)];
+        if (e.f >= 0.0 && e.f <= 1e9) {
+            auto const clip_idx = static_cast<std::size_t>(e.f);
+            if (clip_idx < t.clips.size()) {
+                t.clips[clip_idx].start_tick = static_cast<std::int64_t>(e.f);
+            }
+        }
+        return true;
+    }
     }
     error = "journal: unknown op";
     return false;
@@ -541,4 +557,4 @@ bool load_project(std::string const& dir, Project& out, std::string& error) {
     return true;
 }
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

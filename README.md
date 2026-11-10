@@ -1,4 +1,4 @@
-# addu94
+# Ghost Story
 
 A self-healing, self-improving **song builder** for Linux, purpose-built for
 the **Akai MPK Mini** (mk1 / mk2 / mk3 / MPK Mini Play — detected at runtime).
@@ -6,24 +6,41 @@ the **Akai MPK Mini** (mk1 / mk2 / mk3 / MPK Mini Play — detected at runtime).
 No AI at runtime. No cloud. No accounts. Deterministic algorithms, honest
 latency budgets, and every physical control on the device bound and remappable.
 
-- **Status:** v0.1.0-dev — see [ROADMAP.md](ROADMAP.md)
+- **Status:** v0.2.0-dev — see [ROADMAP.md](ROADMAP.md)
 - **Contract for development sessions:** [GARDENING.md](GARDENING.md)
 - **Architecture decisions:** [docs/adr/](docs/adr/)
+
+## Highlights
+
+- Four-track groovebox (Keys A / Keys B / Drums / Bass) with per-track
+  insert FX chains and ten curated presets.
+- **Live microphone input** — monitor your voice over the beat while it
+  runs, and **grab the last 1/2/4 s straight into a drum pad** as a new
+  sample (PipeWire capture stream / JACK input ports / ALSA capture).
+- The on-screen controller mirror is **playable itself**: drag its knobs,
+  click its pads, mute/arm/volume/pan the tracks, toggle FX chips — every
+  control drives the engine through the same command path as the hardware.
+- Full loop recorder (quantized takes, overdub, undo/redo), 16 built-in
+  drum-kit packs, sample-accurate transport, WAL project persistence.
+- Three audio backends (PipeWire → JACK → ALSA) with lock-free RT mixing.
+- **Four themes** — Graphite (default), Midnight, Slate, Paper — switchable
+  via the labeled THEME dropdown in the health strip, remembered across
+  runs. Window resizes freely (960×600 floor) and F11 goes fullscreen.
 
 ## Quick start (developers)
 
 ```sh
 make ci        # full gate: build + tests + ASan/UBSan + TSan
-make build     # fast local build -> build/main/addu94
-./build/main/addu94 --help
+make build     # fast local build -> build/main/ghost_story
+./build/main/ghost_story --help
 ```
 
 ## User quick start (when installed)
 
 ```sh
-addu94 doctor   # one-command health check
-addu94 probe    # detect your MPK Mini, write the device manifest
-addu94 play     # make music
+Ghost Story doctor   # one-command health check
+Ghost Story probe    # detect your MPK Mini, write the device manifest
+Ghost Story play     # make music
 ```
 
 ## Layout
@@ -42,3 +59,4 @@ addu94 play     # make music
 | `src/ops/` | watchdog, doctor, telemetry (M7) |
 | `tests/` | dependency-free tests, virtual-MIDI only |
 | `tools/` | dev-time tooling (fuzzers, report analysis) |
+| `deploy/elk/` | dev observability stack (ES + Kibana + Filebeat; `make elk-up`) |

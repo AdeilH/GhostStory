@@ -1,4 +1,4 @@
-// addu94 — src/audio/sampler.cpp
+// ghost_story — src/audio/sampler.cpp
 //
 // Sampler DSP implementing the contract in sampler.hpp.
 //
@@ -21,7 +21,7 @@
 #include <string>
 #include <utility>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 namespace {
 
 constexpr float kEnvSilence = 1.0e-4f;   // deanimate voice below this
@@ -111,7 +111,11 @@ void Sampler::note_on(int channel, int note, float velocity) noexcept {
     }
 
     // Pad mapping: 36..43 -> pads 0..7; 44..51 -> the same pad zones
-    // (stored at 36..43) played with an extra +12 semitone shift.
+    // (stored at 36..43) played with an extra +12 semitone shift. An exact
+    // zone at the literal note (load_override accepts 36..51) wins first:
+    // the old code remapped 44..51 unconditionally, so an override WAV
+    // stored at 44..51 was unreachable (has_zone said yes, note_on played
+    // the 36..43 zone instead).
     int pad = -1;
     int tune = 0;
     int zone_note = note;
@@ -124,8 +128,9 @@ void Sampler::note_on(int channel, int note, float velocity) noexcept {
         zone_note = kPadBaseNote + pad;
     }
 
+    auto const& exact = zones_[static_cast<std::size_t>(note)];
     std::shared_ptr<SampleData const> const& zone =
-        zones_[static_cast<std::size_t>(zone_note)];
+        exact != nullptr ? exact : zones_[static_cast<std::size_t>(zone_note)];
     if (zone == nullptr) {
         return;
     }
@@ -341,4 +346,4 @@ bool Sampler::has_zone(int midi_note) const noexcept {
     return zones_[static_cast<std::size_t>(midi_note)] != nullptr;
 }
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

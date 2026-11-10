@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# addu94 — scripts/ci.sh : the local CI gate (mirrors what future hosted CI runs).# addu94 — scripts/ci.sh : the local CI gate (mirrors what future hosted CI runs).
+# ghost_story — scripts/ci.sh : the local CI gate (mirrors what future hosted CI runs).# ghost_story — scripts/ci.sh : the local CI gate (mirrors what future hosted CI runs).
 # Gate order: format check (clang-format if present) -> clean build (GCC, Werror)
 # -> ctest (plain) -> ASan/UBSan test build & run -> TSan build & run (queue/transport)
 # -> clang-tidy (if present, best-effort).
@@ -14,7 +14,7 @@ fail() { echo "ci: FAIL: $*" >&2; exit 1; }
 echo "== [1/6] configure (GCC, release-ish checks) =="
 cmake -S . -B "$BUILD/main" -G Ninja \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DADDU94_WARNINGS_AS_ERRORS=ON \
+    -DGHOST_STORY_WARNINGS_AS_ERRORS=ON \
     -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_COMPILER=gcc
 
@@ -27,7 +27,7 @@ ctest --test-dir "$BUILD/main" --output-on-failure || fail "ctest"
 echo "== [4/6] ASan+UBSan build & test =="
 cmake -S . -B "$BUILD/asan" -G Ninja \
     -DCMAKE_BUILD_TYPE=Debug \
-    -DADDU94_SANITIZE=asan \
+    -DGHOST_STORY_SANITIZE=asan \
     -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_COMPILER=gcc
 cmake --build "$BUILD/asan" -j"$(nproc)" || fail "asan build"
@@ -36,7 +36,7 @@ ctest --test-dir "$BUILD/asan" --output-on-failure || fail "asan tests"
 echo "== [5/6] TSan build & test =="
 cmake -S . -B "$BUILD/tsan" -G Ninja \
     -DCMAKE_BUILD_TYPE=Debug \
-    -DADDU94_SANITIZE=tsan \
+    -DGHOST_STORY_SANITIZE=tsan \
     -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_COMPILER=gcc
 cmake --build "$BUILD/tsan" -j"$(nproc)" || fail "tsan build"
@@ -54,7 +54,7 @@ if command -v clang-tidy >/dev/null 2>&1 && command -v clang++ >/dev/null 2>&1; 
     # (module mapper args) and include paths; generate a clang db instead.
     cmake -S . -B "$BUILD/tidy" -G Ninja \
         -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DADDU94_BUILD_TESTS=OFF >/dev/null
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DGHOST_STORY_BUILD_TESTS=OFF >/dev/null
     cmake --build "$BUILD/tidy" -j"$(nproc)" >/dev/null
     SRC=$(git ls-files 'src/*.cpp' 'src/*.hpp' 2>/dev/null || find src -name '*.cpp' -o -name '*.hpp')
     if [ -n "$SRC" ]; then

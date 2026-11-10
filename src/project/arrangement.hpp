@@ -1,4 +1,4 @@
-// addu94 — src/project/arrangement.hpp
+// ghost_story — src/project/arrangement.hpp
 //
 // Arrangement (spec §2.4): pattern blocks placed on the song timeline.
 // A Block pins a clip to (track, start_bar) with the clip's loop length;
@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace addu94::project {
+namespace ghost_story::project {
 
 struct Block {
     int track{0};
@@ -56,4 +56,4 @@ using Timeline = std::vector<Block>;
     return best;
 }
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

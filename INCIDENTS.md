@@ -14,11 +14,11 @@ symptoms, evidence path, suspected layer, owner session)_
 - **Symptom:** `test_logger` reported consistent data races inside
   `MpmcQueue::pop` under TSan; standalone repros of the same code were clean;
   Clang TSan unavailable (runtime not installed).
-- **Root cause:** `addu94_core` static library was compiled without
+- **Root cause:** `ghost_story_core` static library was compiled without
   `-fsanitize=thread` while test TUs were instrumented. Uninstrumented
   atomics in `logger.cpp` broke TSan happens-before tracking, producing
   phantom races (and could equally hide real ones).
-- **Fix:** apply `addu94_apply_sanitizers` to `addu94_core` whenever
-  `ADDU94_SANITIZE` is on (CMakeLists.txt).
+- **Fix:** apply `ghost_story_apply_sanitizers` to `ghost_story_core` whenever
+  `GHOST_STORY_SANITIZE` is on (CMakeLists.txt).
 - **Regression test:** any sanitizer test build; the build config itself is
   the fix (verified: test_logger/test_spsc/test_mpmc all exit 0 under TSan).

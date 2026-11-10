@@ -1,4 +1,4 @@
-// addu94 — src/ops/bench.hpp
+// ghost_story — src/ops/bench.hpp
 //
 // Benchmark suite (spec §7.2): audio callback headroom percentiles,
 // xrun count, memory footprint. Writes bench-report.json. Deterministic
@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 struct BenchReport {
     double duration_s{0};
@@ -35,4 +35,4 @@ struct BenchReport {
 BenchReport run_bench(int seconds, std::string const& report_path,
                       std::string const& trace_path = {});
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

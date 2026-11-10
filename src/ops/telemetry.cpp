@@ -1,4 +1,4 @@
-// addu94 — src/ops/telemetry.cpp
+// ghost_story — src/ops/telemetry.cpp
 #include "ops/telemetry.hpp"
 
 #include <nlohmann/json.hpp>
@@ -6,10 +6,11 @@
 #include <chrono>
 #include <deque>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <vector>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 namespace {
 bool g_enabled{false};
@@ -22,7 +23,16 @@ std::string telemetry_path() {
                    ? std::filesystem::path{std::getenv("HOME")} / ".local" /
                          "share"
                    : std::filesystem::path{"."});
-    return (base / "addu94" / "telemetry" / "sessions.jsonl").string();
+    return (base / "ghost_story" / "telemetry" / "sessions.jsonl").string();
+}
+
+// ISO-8601 UTC at millisecond precision — matches the log schema so the
+// observability stack can time-filter telemetry the same way as logs.
+std::string iso8601_utc_now() {
+    return std::format(
+        "{:%FT%TZ}",
+        std::chrono::floor<std::chrono::milliseconds>(
+            std::chrono::system_clock::now()));
 }
 }  // namespace
 
@@ -36,6 +46,7 @@ void Telemetry::event(std::string const& kind, std::string const& detail) {
                       std::chrono::duration_cast<std::chrono::nanoseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count())},
+        {"@timestamp", iso8601_utc_now()},
         {"kind", kind},
         {"detail", detail},
     };
@@ -57,6 +68,7 @@ void Telemetry::session_end(SessionStats const& s) {
                       std::chrono::duration_cast<std::chrono::nanoseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count())},
+        {"@timestamp", iso8601_utc_now()},
         {"kind", "session_end"},
         {"xruns", s.xruns},
         {"max_callback_us", s.max_callback_us},
@@ -82,4 +94,4 @@ std::string Telemetry::load_recent(int max_lines) {
     return out;
 }
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

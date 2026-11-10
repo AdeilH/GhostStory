@@ -1,6 +1,18 @@
-// addu94 — src/audio/synth.cpp
+// ghost_story — src/audio/synth.cpp
 //
 // Subtractive synth DSP implementing the contract in synth.hpp.
+//
+// Extras beyond the core subtractive voice:
+//   - Mono-legato + exponential glide: in mono mode a channel owns one
+//     voice; a retriggered note keeps envelope/phases running and ramps
+//     the running pitch toward the new note with the same exponential
+//     shape as the release envelope (one multiply-add per sample, only
+//     while a glide is active — gm == 1 exactly otherwise).
+//   - Velocity -> filter: velocity opens the cutoff around a unity point
+//     at 0.5 velocity (velocity_filter == 0 is bit-identical to before).
+//   - Two routable LFOs (filter/pitch/amp) that accumulate into shared
+//     modulation factors; LFO2 == Off contributes no multiply, so the
+//     single-LFO arithmetic is bit-identical to the previous version.
 //
 // RT contract: no allocation, no locks, no logging, no exceptions on any
 // public entry point. All state lives in the pre-allocated voice pool plus
@@ -34,7 +46,7 @@
 
 #include <cmath>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 namespace {
 
 constexpr double kTwoPi = 6.283185307179586476925286766559;
@@ -155,14 +167,53 @@ void Synth::set_params(SynthParams const& p) noexcept {
     p_.cutoff_base_hz = clampf(p_.cutoff_base_hz, 20.f, 18000.f);
     p_.cutoff_keytrack = clampf(p_.cutoff_keytrack, 0.f, 1.f);
     p_.resonance = clampf(p_.resonance, 0.5f, 10.f);
+    p_.velocity_filter = clampf(p_.velocity_filter, 0.f, 1.f);
+    p_.glide_seconds = clampf(p_.glide_seconds, 0.f, 2.f);
     p_.lfo_rate_hz = clampf(p_.lfo_rate_hz, 0.05f, 20.f);
     p_.lfo_depth = clampf(p_.lfo_depth, 0.f, 1.f);
+    p_.lfo2_rate_hz = clampf(p_.lfo2_rate_hz, 0.05f, 20.f);
+    p_.lfo2_depth = clampf(p_.lfo2_depth, 0.f, 1.f);
 }
 
 void Synth::note_on(int channel, int note, float velocity) noexcept {
     if (note < 0 || note > 127 || channel < 0 || channel > 15) {
         return;
     }
+    float const vel = clampf(velocity, 0.f, 1.f);
+
+    // Mono-legato: the channel owns ONE voice. A new note while a voice on
+    // this channel sounds retargets it — envelope keeps running (legato),
+    // phases keep running (smooth glide character), and with glide_seconds
+    // > 0 the pitch ramps from the running pitch to the new note.
+    if (p_.mono_legato) {
+        for (auto& v : voices_) {
+            if (v.active && v.channel == channel &&
+                v.env_stage != kStageFade) {
+                float const from_hz =
+                    v.glide_on
+                        ? v.glide_hz
+                        : static_cast<float>(
+                              440.0 * std::pow(
+                                          2.0, (static_cast<double>(v.note) -
+                                                69.0) / 12.0));
+                v.note = static_cast<std::uint8_t>(note);
+                v.velocity = vel;
+                if (v.env_stage == 3) {
+                    v.env_stage = 0;  // retrigger attack from current level
+                }
+                if (p_.glide_seconds > 1.0e-4f) {
+                    v.glide_on = true;
+                    v.glide_hz = from_hz;
+                } else {
+                    v.glide_on = false;
+                }
+                return;
+            }
+        }
+        // No sounding voice: fall through to normal allocation (a note
+        // after silence starts at pitch — no glide source to ramp from).
+    }
+
     // Prefer a free voice, scanning round-robin from oldest_hint_ so voices
     // age evenly; otherwise steal the quietest (smallest env) voice, again
     // in round-robin order so ties go to the oldest.
@@ -198,7 +249,7 @@ void Synth::note_on(int channel, int note, float velocity) noexcept {
     v.active = true;
     v.note = static_cast<std::uint8_t>(note);
     v.channel = static_cast<std::uint8_t>(channel);
-    v.velocity = clampf(velocity, 0.f, 1.f);
+    v.velocity = vel;
     v.phase1 = 0.0;
     v.phase2 = 0.0;
     e.phase1b[0] = e.phase1b[1] = 0.0;
@@ -211,6 +262,9 @@ void Synth::note_on(int channel, int note, float velocity) noexcept {
     e.lp2[0] = e.lp2[1] = 0.f;
     e.bp2[0] = e.bp2[1] = 0.f;
     v.lfo_phase = 0.f;
+    v.lfo2_phase = 0.f;
+    v.glide_on = false;  // glide only starts on a mono-legato retrigger
+    v.glide_hz = 0.f;
     v.last_amp = 0.f;
 
     oldest_hint_ = (idx + 1) % kMaxVoices;
@@ -278,8 +332,22 @@ void Synth::render(float* left, float* right, std::uint32_t frames) noexcept {
             : 0.f;
     float const sustain = p_.sustain;
 
-    // LFO increment (sine phase in [0,1), cheap per-sample advance).
+    // LFO increments (sine phase in [0,1), cheap per-sample advance).
     float const lfo_inc = static_cast<float>(static_cast<double>(p_.lfo_rate_hz) / sr_);
+    float const lfo2_inc =
+        static_cast<float>(static_cast<double>(p_.lfo2_rate_hz) / sr_);
+    LfoTarget const lfo2_target = p_.lfo2_target;
+    float const lfo2_depth = p_.lfo2_depth;
+
+    // Mono-glide per-sample approach factor: hz += (target - hz) * g_c
+    // reaches ~0.1% of the gap after glide_seconds (same exponential shape
+    // as the release envelope).
+    float const glide_c =
+        (p_.glide_seconds > 1.0e-4f)
+            ? static_cast<float>(1.0 -
+                                 std::exp(-6.907755279 * dt /
+                                          static_cast<double>(p_.glide_seconds)))
+            : 1.0f;
 
     // Unison layout: up to 3 detuned copies spread symmetrically in cents,
     // panned at constant power across the stereo field.
@@ -320,12 +388,19 @@ void Synth::render(float* left, float* right, std::uint32_t frames) noexcept {
         double const base_hz =
             440.0 * std::pow(2.0, (static_cast<double>(v.note) - 69.0) / 12.0);
 
-        // Keytracked cutoff: fc = clamp(base * 2^(keytrack*(note-60)/12)).
+        // Keytracked cutoff: fc = clamp(base * 2^(keytrack*(note-60)/12)),
+        // opened by velocity: ±velocity_filter octaves around the
+        // 0.5-velocity unity point (quiet notes close, loud notes open).
+        // At velocity_filter == 0 the factor is exactly 1 — bit-identical
+        // to the pre-velocity-filter behavior.
         double const kt = static_cast<double>(p_.cutoff_keytrack) *
                           (static_cast<double>(v.note) - 60.0) / 12.0;
+        double const vel_oct =
+            static_cast<double>(p_.velocity_filter) *
+            (static_cast<double>(v.velocity) * 2.0 - 1.0);
         float const cutoff = clampf(
             static_cast<float>(static_cast<double>(p_.cutoff_base_hz) *
-                               std::pow(2.0, kt)),
+                               std::pow(2.0, kt + vel_oct)),
             20.f, 18000.f);
         float const f_base = clampf(
             static_cast<float>(2.0 * std::sin(kPi * static_cast<double>(cutoff) / sr_)), 0.01f,
@@ -341,50 +416,89 @@ void Synth::render(float* left, float* right, std::uint32_t frames) noexcept {
         }
 
         for (std::uint32_t i = 0; i < frames; ++i) {
-            // --- LFO (per-voice sine phase, cheap per-sample advance) ---
+            // --- LFOs (per-voice sine phases, cheap per-sample advance).
+            // Both LFOs accumulate into shared modulation factors so they
+            // can target the same destination (factors multiply). With
+            // LFO2 == Off the arithmetic is bit-identical to the
+            // single-LFO version (Off contributes no multiply).
             float const lfo = static_cast<float>(
                 std::sin(kTwoPi * static_cast<double>(v.lfo_phase)));
             v.lfo_phase += lfo_inc;
             if (v.lfo_phase >= 1.f) {
                 v.lfo_phase -= 1.f;
             }
+            float const lfo2 = static_cast<float>(
+                std::sin(kTwoPi * static_cast<double>(v.lfo2_phase)));
+            v.lfo2_phase += lfo2_inc;
+            if (v.lfo2_phase >= 1.f) {
+                v.lfo2_phase -= 1.f;
+            }
             float pm = 1.0f;        // pitch modulation factor on increment
-            float f = f_base;       // SVF coefficient (modulated for Filter)
+            float fc_mult = 1.0f;   // cutoff modulation (Filter target)
             float amp_mod = 1.0f;   // gain scale (modulated for Amp)
             switch (lfo_target) {
-            case LfoTarget::Filter: {
-                float const fc = clampf(
-                    cutoff * static_cast<float>(std::pow(
-                                 2.0, static_cast<double>(lfo) *
-                                          static_cast<double>(lfo_depth))),
-                    20.f, 18000.f);
-                f = clampf(
-                    static_cast<float>(2.0 * std::sin(kPi * static_cast<double>(fc) / sr_)), 0.01f,
-                    0.93f);
+            case LfoTarget::Filter:
+                fc_mult *= static_cast<float>(std::pow(
+                    2.0, static_cast<double>(lfo) *
+                             static_cast<double>(lfo_depth)));
                 break;
-            }
             case LfoTarget::Pitch:
                 // Vibrato: depth interpreted as semitones peak deviation.
-                pm = static_cast<float>(std::pow(
+                pm *= static_cast<float>(std::pow(
                     2.0, static_cast<double>(lfo) *
                              static_cast<double>(lfo_depth) / 12.0));
                 break;
             case LfoTarget::Amp:
-                amp_mod = clampf(1.0f + lfo * lfo_depth, 0.f, 2.f);
+                amp_mod *= clampf(1.0f + lfo * lfo_depth, 0.f, 2.f);
                 break;
             case LfoTarget::Off:
                 break;
             }
+            switch (lfo2_target) {
+            case LfoTarget::Filter:
+                fc_mult *= static_cast<float>(std::pow(
+                    2.0, static_cast<double>(lfo2) *
+                             static_cast<double>(lfo2_depth)));
+                break;
+            case LfoTarget::Pitch:
+                pm *= static_cast<float>(std::pow(
+                    2.0, static_cast<double>(lfo2) *
+                             static_cast<double>(lfo2_depth) / 12.0));
+                break;
+            case LfoTarget::Amp:
+                amp_mod *= clampf(1.0f + lfo2 * lfo2_depth, 0.f, 2.f);
+                break;
+            case LfoTarget::Off:
+                break;
+            }
+            float f = f_base;  // SVF coefficient (modulated for Filter)
+            if (fc_mult != 1.0f) {
+                float const fc = clampf(cutoff * fc_mult, 20.f, 18000.f);
+                f = clampf(
+                    static_cast<float>(2.0 * std::sin(kPi * static_cast<double>(fc) / sr_)), 0.01f,
+                    0.93f);
+            }
+
+            // --- Mono-glide: ramp the running pitch toward the note ---
+            float gm = 1.0f;
+            if (v.glide_on) {
+                v.glide_hz += (static_cast<float>(base_hz) - v.glide_hz) *
+                              glide_c;
+                gm = v.glide_hz / static_cast<float>(base_hz);
+            }
 
             // --- Oscillators: unison copies panned before the mix, so the
             // filter input differs per channel and is filtered separately.
+            // pm carries LFO vibrato, gm the mono-glide ramp (gm == 1
+            // exactly when not gliding — bit-identical increments).
+            float const pitch_mult = pm * gm;
             double o1l = 0.0, o1r = 0.0, o2l = 0.0, o2r = 0.0;
             for (int c = 0; c < n; ++c) {
                 double& ph1 = c == 0 ? v.phase1 : e.phase1b[c - 1];
-                advance_phase(ph1, static_cast<double>(inc1[c]) * static_cast<double>(pm));
+                advance_phase(ph1, static_cast<double>(inc1[c]) * static_cast<double>(pitch_mult));
                 float const w1 = wave_value(p_.osc1, ph1);
                 double& ph2 = c == 0 ? v.phase2 : e.phase2b[c - 1];
-                advance_phase(ph2, static_cast<double>(inc2[c]) * static_cast<double>(pm));
+                advance_phase(ph2, static_cast<double>(inc2[c]) * static_cast<double>(pitch_mult));
                 float const w2 = wave_value(p_.osc2, ph2);
                 double const pl = static_cast<double>(pan_l[c]);
                 double const pr = static_cast<double>(pan_r[c]);
@@ -473,4 +587,4 @@ int Synth::active_voices() const noexcept {
     return count;
 }
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

@@ -1,4 +1,4 @@
-// addu94 — src/audio/render_engine.hpp
+// ghost_story — src/audio/render_engine.hpp
 //
 // Offline (non-RT) renderer for export (spec §2.7): renders one track's
 // clip loop N times through Synth + FxChain, sample-exactly, and mixes
@@ -21,7 +21,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 struct RenderRequest {
     music::Clip const* clip{nullptr};  // clip to render (loop, once through)
@@ -49,4 +49,4 @@ RenderResult render_track(RenderRequest const& req, int loop_count);
 /// master must equal the element-wise sum of the stems within 1e-6.
 RenderResult mix_down(std::vector<RenderResult> const& stems);
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

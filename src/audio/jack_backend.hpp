@@ -1,7 +1,7 @@
-// addu94 — src/audio/jack_backend.hpp
+// ghost_story — src/audio/jack_backend.hpp
 //
 // JACK playback backend (spec §3, ADR 002): a jack_client with two output
-// ports (addu94:out_L / addu94:out_R). The JACK process callback is the RT
+// ports (ghost_story:out_L / ghost_story:out_R). The JACK process callback is the RT
 // path: it calls the stored RenderFn DIRECTLY (it is RT-safe by contract —
 // see audio/backend.hpp) writing into the port buffers obtained via
 // jack_port_get_buffer. NO allocation, no locks, no logging in the
@@ -25,7 +25,7 @@
 // under a unique name and immediately closing it. This was chosen over a
 // dlopen("libjack.so.0") test because a JACK *client* backend is only
 // usable with a running server (PipeWire provides one via pipewire-jack):
-// the probe answers the actually interesting question — "can addu94 stream
+// the probe answers the actually interesting question — "can ghost_story stream
 // through JACK right now?" — and open() applies the same check.
 #pragma once
 
@@ -37,7 +37,7 @@
 #include <cstdint>
 #include <string>
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 class JackBackend final : public AudioBackend {
 public:
@@ -86,10 +86,18 @@ private:
     void fire_state(StreamState s) noexcept;
     /// Non-RT: best-effort jack_connect to system playback ports.
     void connect_playback_ports() noexcept;
+    /// Non-RT: best-effort jack_connect from system capture ports to our
+    /// input ports (live mic). Failure is a warning — route manually.
+    void connect_capture_ports() noexcept;
 
     jack_client_t* client_{nullptr};
     jack_port_t* port_l_{nullptr};
     jack_port_t* port_r_{nullptr};
+    // Capture ports (registered only when cfg.capture_ring was provided —
+    // a bare playback client registers nothing extra).
+    jack_port_t* in_l_{nullptr};
+    jack_port_t* in_r_{nullptr};
+    CaptureRing* capture_ring_{nullptr};
     std::atomic<bool> activated_{false};
 
     // Callback hooks: written by non-RT threads, read by the RT thread, so
@@ -115,4 +123,4 @@ private:
     std::atomic<bool> shutdown_seen_{false}; // server told us goodbye
 };
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

@@ -1,4 +1,4 @@
-// addu94 — src/project/export_wav.hpp
+// ghost_story — src/project/export_wav.hpp
 //
 // WAV export of a project's tracks (spec §2.7 / M6): renders every track
 // offline (audio::render_track) and writes one 32-bit float stereo WAV
@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-namespace addu94::project {
+namespace ghost_story::project {
 
 struct ExportSpec {
     std::string output_dir;                    // stems written here
@@ -30,4 +30,4 @@ struct ExportSpec {
 /// master is the exact mix_down sum of the stems (M6 gate: within 1e-6).
 bool export_wav_stems(ExportSpec const& spec, std::string& error);
 
-}  // namespace addu94::project
+}  // namespace ghost_story::project

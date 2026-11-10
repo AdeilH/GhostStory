@@ -1,4 +1,4 @@
-// addu94 — src/ops/bench.cpp
+// ghost_story — src/ops/bench.cpp
 #include "ops/bench.hpp"
 
 #include "audio/engine.hpp"
@@ -13,7 +13,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-namespace addu94::ops {
+namespace ghost_story::ops {
 
 namespace {
 
@@ -137,4 +137,4 @@ BenchReport run_bench(int seconds, std::string const& report_path,
     return rep;
 }
 
-}  // namespace addu94::ops
+}  // namespace ghost_story::ops

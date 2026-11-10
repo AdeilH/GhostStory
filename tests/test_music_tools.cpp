@@ -1,4 +1,4 @@
-// addu94 — tests/test_music_tools.cpp
+// ghost_story — tests/test_music_tools.cpp
 // Property + unit tests: velocity curves, scale-lock, quantizer grids.
 #include "test_framework.hpp"
 
@@ -8,7 +8,7 @@
 
 #include <vector>
 
-using namespace addu94::music;
+using namespace ghost_story::music;
 
 TEST(velocity, off_passes_through_and_bounds_clamp) {
     for (auto c : {VelocityCurve::Linear, VelocityCurve::Log,

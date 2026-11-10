@@ -1,9 +1,9 @@
-// addu94 — src/core/toml_min.cpp
+// ghost_story — src/core/toml_min.cpp
 #include "core/toml_min.hpp"
 
 #include <cctype>
 
-namespace addu94::core {
+namespace ghost_story::core {
 
 namespace {
 
@@ -114,4 +114,4 @@ std::optional<TomlTable> toml_parse(std::string_view text, TomlError& err) {
     return table;
 }
 
-}  // namespace addu94::core
+}  // namespace ghost_story::core

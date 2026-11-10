@@ -1,8 +1,11 @@
-// addu94 — src/audio/drum_kit.hpp
+// ghost_story — src/audio/drum_kit.hpp
 //
-// Drum-kit mode glue (spec §4.1/§4.3): pads on channel 9; notes 36..43 are
-// Bank A pads 1..8, notes 44..51 the same pads +12 (handled inside the
-// Sampler's pad mapping).
+// Drum-kit mode glue (spec §4.1/§4.3): pads on channel 9; PLAY mode fires
+// ALL 16 hardware pads — notes 36..43 are Bank A pads 1..8, notes 44..51
+// the SAME pads one octave up (the Sampler's pad mapping applies +12).
+// EDIT/KIT mode pads have their mode functions (track select, undo/redo,
+// chord slots, pack select) and are not routed here — PlayEngine gates
+// the drum path on the mode.
 //
 // Zero-external-files playability: init() synthesizes 8 deterministic
 // one-shots (kick, rim, snare, clap, tom, closed hat, open hat, crash) per
@@ -36,14 +39,14 @@
 
 #include "audio/sampler.hpp"
 
-namespace addu94::audio {
+namespace ghost_story::audio {
 
 /// Single source of truth for how many built-in packs exist. pack_count()
 /// and the samplers_ array (and kPackSpecs in the .cpp, sized from this)
 /// all derive from it, so adding a pack touches exactly one number here
 /// plus one table row there. (A stale kPacks literal once made packs 4..7
 /// index out of bounds — the bug this constant exists to prevent.)
-inline constexpr int kPackCount = 8;
+inline constexpr int kPackCount = 16;
 
 class DrumKit {
 public:
@@ -76,6 +79,12 @@ public:
     bool load_override(int midi_note, std::string const& wav_path,
                        std::string& error);
 
+    /// Control thread. Same, from in-memory data — the live-mic grab path
+    /// loads captured audio as a pad zone with no temp file. Same accepted
+    /// zone-swap semantics as load_override (see the header note above).
+    bool load_override_data(int midi_note, WavData const& data,
+                            std::string& error);
+
     void set_params(SamplerParams const& p) noexcept;
 
     /// Control thread. Re-synthesizes all packs at the new rate (packs are
@@ -104,4 +113,4 @@ private:
     bool initialized_{false};
 };
 
-}  // namespace addu94::audio
+}  // namespace ghost_story::audio

@@ -1,20 +1,20 @@
 {
   "backend": "pipewire",
   "budget_pct": {
-    "max": 0.5437500000000001,
-    "p99": 0.084375
+    "max": 0.46875000000000006,
+    "p99": 0.075
   },
   "buffer_size": 512,
   "callback_us": {
-    "max": 58,
+    "max": 50,
     "p50": 3.0,
     "p95": 5.0,
-    "p99": 9.0
+    "p99": 8.0
   },
-  "callbacks": 11249,
-  "duration_s": 120.005971554,
+  "callbacks": 2814,
+  "duration_s": 30.018229584,
   "gate_pass": true,
-  "rss_kb": 25012,
+  "rss_kb": 25064,
   "sample_rate": 48000,
   "schema": 1,
   "xruns": 0

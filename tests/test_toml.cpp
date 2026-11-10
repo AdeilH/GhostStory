@@ -1,4 +1,4 @@
-// addu94 — tests/test_toml.cpp
+// ghost_story — tests/test_toml.cpp
 // Parser + fuzz-lite: garbage never crashes.
 #include "test_framework.hpp"
 
@@ -7,14 +7,14 @@
 #include <string>
 #include <vector>
 
-using addu94::core::TomlError;
-using addu94::core::TomlTable;
-using addu94::core::toml_parse;
+using ghost_story::core::TomlError;
+using ghost_story::core::TomlTable;
+using ghost_story::core::toml_parse;
 
 TEST(toml, parses_all_scalar_types) {
     TomlError err;
     auto t = toml_parse(R"(# comment
-title = "addu94"
+title = "ghost_story"
 tempo = 120
 gain = 0.75
 enabled = true
@@ -23,7 +23,7 @@ buffer = 512
 rate = 48000.5
 )", err);
     CHECK(t.has_value());
-    CHECK_EQ(t->at("title").as_str(), "addu94");
+    CHECK_EQ(t->at("title").as_str(), "ghost_story");
     CHECK_EQ(t->at("tempo").as_int(), 120);
     CHECK(t->at("tempo").as_float() == 120.0);  // int promotes
     CHECK(t->at("gain").as_float() == 0.75);
